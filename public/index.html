@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#d9480f">
+  <title>Cookclip</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/icon-192.png">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="top">
+    <h1>Cook<span>clip</span></h1>
+    <nav>
+      <button id="tab-new" class="tab active" type="button">Nouvelle</button>
+      <button id="tab-saved" class="tab" type="button">Enregistrées</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- Saisie -->
+    <section id="view-new">
+      <form id="form" autocomplete="off">
+        <label for="url">Lien de la vidéo YouTube</label>
+        <input id="url" name="url" type="url" inputmode="url" placeholder="https://youtu.be/…" required>
+
+        <details id="manual">
+          <summary>Ça ne marche pas ? Colle la transcription</summary>
+          <p class="hint">Sur YouTube : « … plus » sous la vidéo, puis « Afficher la transcription ». Copie le texte ici.</p>
+          <textarea id="transcript" rows="6" placeholder="Transcription de la vidéo…"></textarea>
+        </details>
+
+        <button id="go" class="primary" type="submit">Extraire la recette</button>
+      </form>
+      <p id="status" class="status" role="status" aria-live="polite" hidden></p>
+    </section>
+
+    <!-- Résultat -->
+    <article id="recipe" hidden>
+      <h2 id="r-title"></h2>
+      <p id="r-meta" class="meta"></p>
+
+      <div class="servings">
+        <span>Portions</span>
+        <button id="minus" type="button" aria-label="Moins de portions">−</button>
+        <strong id="servings-value">4</strong>
+        <button id="plus" type="button" aria-label="Plus de portions">+</button>
+      </div>
+
+      <div id="r-warnings" class="warnings" hidden></div>
+
+      <h3>Ingrédients</h3>
+      <ul id="r-ingredients" class="ingredients"></ul>
+
+      <h3>Préparation</h3>
+      <ol id="r-steps" class="steps"></ol>
+
+      <div id="r-tips-wrap" hidden>
+        <h3>Astuces</h3>
+        <ul id="r-tips"></ul>
+      </div>
+
+      <div class="actions">
+        <button id="save" class="primary" type="button">Enregistrer</button>
+        <button id="copy-list" type="button">Copier la liste de courses</button>
+        <button id="share" type="button" hidden>Partager</button>
+      </div>
+    </article>
+
+    <!-- Recettes enregistrées -->
+    <section id="view-saved" hidden>
+      <p id="saved-empty" class="hint">Aucune recette enregistrée pour l'instant.</p>
+      <ul id="saved-list" class="saved"></ul>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <script src="/app.js" defer></script>
+</body>
+</html>
