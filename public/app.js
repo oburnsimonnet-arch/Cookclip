@@ -148,17 +148,87 @@ function renderRecipe() {
   $("view-saved").hidden = true;
   $("recipe").hidden = false;
   $("share").hidden = !navigator.share;
+  $("refresh").hidden = !current.videoId;
   window.scrollTo({ top: 0 });
 }
 
-function showRecipe(recipe, servings) {
+function showRecipe(recipe, servings, videoId = null) {
   const base = recipe.servings || 4;
-  current = { recipe, baseServings: base, servings: servings || base };
+  current = { recipe, baseServings: base, servings: servings || base, videoId };
   renderRecipe();
 }
 
+/* ---------- Mémoire des recettes déjà extraites ----------
+   Chaque extraction consomme du quota Gemini : on garde le résultat sur l'appareil,
+   par identifiant de vidéo, pour ne jamais payer deux fois la même vidéo. */
+const CACHE_KEY = "cookclip.cache.v1";
+const CACHE_MAX = 40;
+const ID_RE = /^[A-Za-z0-9_-]{11}$/;
+
+function videoIdFrom(input) {
+  const text = (input || "").trim();
+  if (ID_RE.test(text)) return text;
+  const m = text.match(/https?:\/\/[^\s]+/i);
+  if (!m) return null;
+  let url;
+  try {
+    url = new URL(m[0]);
+  } catch {
+    return null;
+  }
+  const host = url.hostname.replace(/^www\.|^m\./, "");
+  if (host === "youtu.be") {
+    const id = url.pathname.split("/")[1];
+    return id && ID_RE.test(id) ? id : null;
+  }
+  if (host === "youtube.com" || host === "music.youtube.com") {
+    const v = url.searchParams.get("v");
+    if (v && ID_RE.test(v)) return v;
+    const p = url.pathname.match(/^\/(?:shorts|embed|live)\/([A-Za-z0-9_-]{11})/);
+    if (p) return p[1];
+  }
+  return null;
+}
+
+function readCache() {
+  try {
+    return JSON.parse(localStorage.getItem(CACHE_KEY)) || {};
+  } catch {
+    return {};
+  }
+}
+
+function cacheGet(id) {
+  return readCache()[id] || null;
+}
+
+function cachePut(id, recipe) {
+  try {
+    const cache = readCache();
+    cache[id] = { recipe, at: Date.now() };
+    // on ne garde que les plus récentes
+    const ids = Object.keys(cache).sort((a, b) => cache[b].at - cache[a].at);
+    ids.slice(CACHE_MAX).forEach((old) => delete cache[old]);
+    localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
+  } catch {
+    /* stockage plein ou indisponible : on continue sans mémoire */
+  }
+}
+
 /* ---------- Appel au backend ---------- */
-async function extract(payload) {
+async function extract(payload, { force = false } = {}) {
+  const videoId = videoIdFrom(payload.url);
+
+  if (videoId && !payload.transcript && !force) {
+    const hit = cacheGet(videoId);
+    if (hit) {
+      setStatus("");
+      showRecipe(hit.recipe, null, videoId);
+      toast("Recette déjà extraite : aucun appel à Gemini");
+      return;
+    }
+  }
+
   const btn = $("go");
   btn.disabled = true;
   setStatus("Lecture de la vidéo et extraction de la recette… (jusqu'à une minute)");
@@ -174,7 +244,8 @@ async function extract(payload) {
       throw new Error(data.error || "Erreur " + res.status);
     }
     setStatus("");
-    showRecipe(data.recipe);
+    if (videoId) cachePut(videoId, data.recipe);
+    showRecipe(data.recipe, null, videoId);
   } catch (err) {
     setStatus(err.message || "Échec de la requête.", true);
   } finally {
@@ -209,6 +280,14 @@ function shoppingText() {
     })
     .join("\n");
 }
+
+// Nouvel appel à Gemini pour cette vidéo (si la recette extraite est fausse ou incomplète)
+$("refresh").addEventListener("click", () => {
+  if (!current || !current.videoId) return;
+  showTab("new");
+  $("url").value = "https://www.youtube.com/watch?v=" + current.videoId;
+  extract({ url: $("url").value }, { force: true });
+});
 
 $("copy-list").addEventListener("click", async () => {
   const text = `${current.recipe.title} (${current.servings} portions)\n${shoppingText()}`;
