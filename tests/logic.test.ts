@@ -2,8 +2,11 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { canonicalVideoUrl, extractVideoId } from "../lib/youtube.js";
 import { extractJson, normalizeRecipe } from "../lib/recipe.js";
+import { isAuthorized } from "../lib/access.js";
+import { normalizeCategory } from "../lib/recipe.js";
 import {
   buildTextMessage,
+  FRENCH_INSTRUCTION,
   DEFAULT_MODEL,
   extractRecipeFromText,
   extractRecipeFromVideo,
@@ -104,7 +107,7 @@ test("normalizeRecipe : rejette ce qui n'est pas une recette", () => {
 
 test("vidéo : envoie le lien canonique à Gemini avec les bons réglages", async () => {
   const { client, calls } = fakeGemini(SAMPLE_MODEL_REPLY);
-  const recipe = await extractRecipeFromVideo(ID, client);
+  const recipe = await extractRecipeFromVideo(ID, { client });
 
   assert.equal(recipe.title, "Pâte à crêpes");
   assert.equal(recipe.ingredients.length, 7);
@@ -125,7 +128,7 @@ test("vidéo : GEMINI_MODEL permet de changer de modèle", async () => {
   const { client, calls } = fakeGemini(SAMPLE_MODEL_REPLY);
   process.env.GEMINI_MODEL = "gemini-test";
   try {
-    await extractRecipeFromVideo(ID, client);
+    await extractRecipeFromVideo(ID, { client });
   } finally {
     delete process.env.GEMINI_MODEL;
   }
@@ -134,21 +137,21 @@ test("vidéo : GEMINI_MODEL permet de changer de modèle", async () => {
 
 test("vidéo : réponse vide de Gemini -> erreur claire", async () => {
   const { client } = fakeGemini(undefined);
-  await assert.rejects(() => extractRecipeFromVideo(ID, client), /aucune réponse/);
+  await assert.rejects(() => extractRecipeFromVideo(ID, { client }), /aucune réponse/);
   const { client: client2 } = fakeGemini("   ");
-  await assert.rejects(() => extractRecipeFromVideo(ID, client2), /aucune réponse/);
+  await assert.rejects(() => extractRecipeFromVideo(ID, { client: client2 }), /aucune réponse/);
 });
 
 test("vidéo : Gemini dit que ce n'est pas une recette", async () => {
   const { client } = fakeGemini('{"isRecipe": false}');
-  await assert.rejects(() => extractRecipeFromVideo(ID, client), /ne semble pas contenir/);
+  await assert.rejects(() => extractRecipeFromVideo(ID, { client }), /ne semble pas contenir/);
 });
 
 test("texte : la transcription collée est envoyée sans fileData", async () => {
   const { client, calls } = fakeGemini(SAMPLE_MODEL_REPLY);
   const recipe = await extractRecipeFromText(
     { title: "Pâte à crêpes", transcript: SAMPLE_TRANSCRIPT },
-    client,
+    { client },
   );
   assert.equal(recipe.servings, 6);
   assert.equal(typeof calls[0].contents, "string");
@@ -167,6 +170,69 @@ test("texte : tronque les contenus trop longs", () => {
 
 test("texte : refuse une transcription vide sans appeler Gemini", async () => {
   const { client, calls } = fakeGemini(SAMPLE_MODEL_REPLY);
-  await assert.rejects(() => extractRecipeFromText({ transcript: "  " }, client), /Aucun contenu/);
+  await assert.rejects(() => extractRecipeFromText({ transcript: "  " }, { client }), /Aucun contenu/);
   assert.equal(calls.length, 0);
+});
+
+test("accès : ouvert si aucun code n'est configuré", () => {
+  assert.equal(isAuthorized(undefined, undefined), true);
+  assert.equal(isAuthorized("n'importe quoi", ""), true);
+});
+
+test("accès : refuse un code absent, vide ou faux", () => {
+  assert.equal(isAuthorized(undefined, "secret-123"), false);
+  assert.equal(isAuthorized("", "secret-123"), false);
+  assert.equal(isAuthorized("secret-124", "secret-123"), false);
+  assert.equal(isAuthorized(["secret-123"], "secret-123"), false); // en-tête répété
+  assert.equal(isAuthorized(42, "secret-123"), false);
+});
+
+test("accès : accepte le bon code", () => {
+  assert.equal(isAuthorized("secret-123", "secret-123"), true);
+});
+
+test("catégorie : ramenée à la liste connue", () => {
+  assert.equal(normalizeCategory("Plat principal"), "plat");
+  assert.equal(normalizeCategory("Entrée"), "entrée");
+  assert.equal(normalizeCategory("dessert"), "dessert");
+  assert.equal(normalizeCategory("Gâteau au chocolat"), "dessert");
+  assert.equal(normalizeCategory("Apéro"), "apéritif");
+  assert.equal(normalizeCategory("Pain maison"), "pain et pâtisserie");
+  assert.equal(normalizeCategory("soupe"), "autre");
+  assert.equal(normalizeCategory(""), null);
+  assert.equal(normalizeCategory(undefined), null);
+});
+
+test("mots-clés : normalisés, dédoublonnés, limités à 6", () => {
+  const r = normalizeRecipe({
+    category: "Plat",
+    tags: ["Végétarien", "végétarien", "Rapide", "a", "b", "c", "d", "e", "x".repeat(50)],
+    ingredients: [{ name: "riz", quantity: 1 }],
+    steps: ["Cuire."],
+  });
+  assert.equal(r.category, "plat");
+  assert.equal(r.tags.length, 6);
+  assert.equal(r.tags[0], "végétarien");
+  assert.ok(r.tags.every((t) => t.length <= 30));
+});
+
+test("français : la consigne n'est ajoutée que sur demande (vidéo)", async () => {
+  const off = fakeGemini(SAMPLE_MODEL_REPLY);
+  await extractRecipeFromVideo(ID, { client: off.client });
+  assert.ok(!off.calls[0].contents[1].text.includes("en français"));
+
+  const on = fakeGemini(SAMPLE_MODEL_REPLY);
+  await extractRecipeFromVideo(ID, { client: on.client, french: true });
+  assert.ok(on.calls[0].contents[1].text.includes(FRENCH_INSTRUCTION));
+});
+
+test("français : la consigne n'est ajoutée que sur demande (texte)", () => {
+  assert.ok(!buildTextMessage({ transcript: "abc" }).includes("CONSIGNE"));
+  assert.ok(buildTextMessage({ transcript: "abc" }, true).includes("CONSIGNE"));
+});
+
+test("le prompt demande catégorie et mots-clés", () => {
+  assert.ok(SYSTEM_PROMPT.includes('"category"'));
+  assert.ok(SYSTEM_PROMPT.includes('"tags"'));
+  assert.ok(SYSTEM_PROMPT.includes("pain et pâtisserie"));
 });

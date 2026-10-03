@@ -1,9 +1,28 @@
-// Service worker minimal : met en cache l'interface (pas l'API) pour un lancement instantané.
-const CACHE = "cookclip-v1";
-const SHELL = ["/", "/styles.css", "/app.js", "/manifest.webmanifest", "/icon.svg"];
+// Service worker minimal : met en cache l'interface (pas l'API) pour un lancement instantané,
+// y compris hors connexion (les recettes enregistrées vivent dans le stockage de l'appareil).
+const CACHE = "cookclip-v2";
+const SHELL = [
+  "/",
+  "/styles.css",
+  "/app.js",
+  "/js/ids.js",
+  "/js/format.js",
+  "/js/sanitize.js",
+  "/js/store.js",
+  "/js/backup.js",
+  "/js/shopping.js",
+  "/js/timer.js",
+  "/js/cook.js",
+  "/js/edit.js",
+  "/manifest.webmanifest",
+  "/icon.svg",
+];
 
 self.addEventListener("install", (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)));
+  // un fichier manquant ne doit pas empêcher l'installation des autres
+  e.waitUntil(
+    caches.open(CACHE).then((c) => Promise.allSettled(SHELL.map((url) => c.add(url)))),
+  );
   self.skipWaiting();
 });
 
@@ -23,8 +42,10 @@ self.addEventListener("fetch", (e) => {
   e.respondWith(
     fetch(e.request)
       .then((res) => {
-        const copy = res.clone();
-        caches.open(CACHE).then((c) => c.put(e.request, copy));
+        if (res.ok) {
+          const copy = res.clone();
+          caches.open(CACHE).then((c) => c.put(e.request, copy));
+        }
         return res;
       })
       .catch(() => caches.match(e.request).then((r) => r || caches.match("/"))),

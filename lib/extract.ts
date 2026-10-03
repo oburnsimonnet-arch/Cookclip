@@ -1,5 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
-import { extractJson, normalizeRecipe, type Recipe } from "./recipe.js";
+import { CATEGORIES, extractJson, normalizeRecipe, type Recipe } from "./recipe.js";
 import { canonicalVideoUrl } from "./youtube.js";
 
 export const DEFAULT_MODEL = "gemini-3.8-flash";
@@ -16,15 +16,19 @@ Règles strictes :
 5. Normalise les unités : g, kg, ml, cl, l, c. à soupe, c. à café, pincée, gousse, etc. "quantity" est un nombre (0.5 pour « une demi »).
 6. Les étapes sont à l'impératif, dans l'ordre, une action principale par étape. Mets "durationMin" seulement si un temps est cité ou affiché.
 7. Ignore le blabla : présentations, sponsors, « abonnez-vous ».
-8. Écris la recette dans la langue de la vidéo.
+8. Écris la recette dans la langue de la vidéo, sauf consigne contraire donnée avec la demande.
 9. Dans "warnings", signale tout ce qui limite la fiabilité (quantités absentes, passage inaudible, étape peu claire).
 10. Si le contenu n'est pas une recette de cuisine, renvoie {"isRecipe": false}.
+11. "category" : l'une de ces valeurs exactement : ${CATEGORIES.join(", ")}.
+12. "tags" : 0 à 5 mots-clés courts et vérifiables (ex. « végétarien » seulement si aucun ingrédient n'est de la viande ou du poisson ; « rapide », « four », « une poêle », « sans gluten » seulement si c'est évident). En cas de doute, n'en mets pas.
 
 Réponds UNIQUEMENT par un objet JSON, sans texte autour, de cette forme :
 {
   "isRecipe": true,
   "title": string,
   "language": "fr" | "en" | ...,
+  "category": string,
+  "tags": [string],
   "servings": number | null,
   "prepTimeMin": number | null,
   "cookTimeMin": number | null,
@@ -37,11 +41,22 @@ Réponds UNIQUEMENT par un objet JSON, sans texte autour, de cette forme :
 const VIDEO_INSTRUCTION =
   "Extrais la recette de cette vidéo de cuisine, en suivant strictement les consignes.";
 
+/** Ajoutée à la demande quand l'utilisateur veut une recette en français. */
+export const FRENCH_INSTRUCTION =
+  ' Rédige toute la recette en français (titre, ingrédients, étapes, astuces, avertissements) : traduis-la si la vidéo est dans une autre langue, et mets "language": "fr".';
+
 /** Limite de caractères pour une transcription collée à la main (≈ 25 000 tokens). */
 const MAX_TRANSCRIPT_CHARS = 90_000;
 
 /** Sous-ensemble du client Gemini utilisé ici (facilite les tests). */
 export type GeminiClient = Pick<GoogleGenAI, "models">;
+
+export interface ExtractOptions {
+  /** Demande une recette rédigée en français, quelle que soit la langue de la vidéo. */
+  french?: boolean;
+  /** Client à utiliser (tests). Par défaut : client réel configuré par GEMINI_API_KEY. */
+  client?: GeminiClient;
+}
 
 function makeClient(): GeminiClient {
   return new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
@@ -72,13 +87,14 @@ function parseResponse(text: string | undefined): Recipe {
 /** Gemini regarde et écoute la vidéo YouTube directement (vidéos publiques uniquement). */
 export async function extractRecipeFromVideo(
   videoId: string,
-  client: GeminiClient = makeClient(),
+  options: ExtractOptions = {},
 ): Promise<Recipe> {
+  const client = options.client ?? makeClient();
   const response = await client.models.generateContent({
     model: modelName(),
     contents: [
       { fileData: { fileUri: canonicalVideoUrl(videoId) } },
-      { text: VIDEO_INSTRUCTION },
+      { text: VIDEO_INSTRUCTION + (options.french ? FRENCH_INSTRUCTION : "") },
     ],
     config: BASE_CONFIG,
   });
@@ -91,25 +107,27 @@ export interface TextInput {
   transcript: string;
 }
 
-export function buildTextMessage(input: TextInput): string {
+export function buildTextMessage(input: TextInput, french = false): string {
   const parts: string[] = [];
   if (input.title) parts.push(`TITRE :\n${input.title}`);
   if (input.description) parts.push(`DESCRIPTION :\n${input.description.slice(0, 8_000)}`);
   parts.push(`TRANSCRIPTION :\n${input.transcript.slice(0, MAX_TRANSCRIPT_CHARS)}`);
+  if (french) parts.push(`CONSIGNE :${FRENCH_INSTRUCTION}`);
   return parts.join("\n\n");
 }
 
 /** Secours : l'utilisateur colle lui-même la transcription. */
 export async function extractRecipeFromText(
   input: TextInput,
-  client: GeminiClient = makeClient(),
+  options: ExtractOptions = {},
 ): Promise<Recipe> {
   if (!input.transcript.trim()) {
     throw new Error("Aucun contenu à analyser.");
   }
+  const client = options.client ?? makeClient();
   const response = await client.models.generateContent({
     model: modelName(),
-    contents: buildTextMessage(input),
+    contents: buildTextMessage(input, options.french),
     config: BASE_CONFIG,
   });
   return parseResponse(response.text);

@@ -26,6 +26,8 @@
         <label for="url">Lien de la vidéo YouTube</label>
         <input id="url" name="url" type="url" inputmode="url" placeholder="https://youtu.be/…" required>
 
+        <label class="check"><input id="french" type="checkbox" checked> Rédiger la recette en français</label>
+
         <details id="manual">
           <summary>Ça ne marche pas ? Colle la transcription à la place</summary>
           <p class="hint">Sur YouTube : « … plus » sous la vidéo, puis « Afficher la transcription ». Copie le texte ici.</p>
@@ -34,55 +36,126 @@
 
         <button id="go" class="primary" type="submit">Extraire la recette</button>
       </form>
+
+      <form id="access-form" class="access" autocomplete="off" hidden>
+        <label for="access-code">Code d'accès</label>
+        <p class="hint">Ce site est protégé. Saisis le code défini dans Vercel (variable ACCESS_CODE).</p>
+        <input id="access-code" type="password" autocomplete="current-password" required>
+        <button class="primary" type="submit">Valider</button>
+      </form>
+
       <p id="status" class="status" role="status" aria-live="polite" hidden></p>
     </section>
 
-    <!-- Résultat -->
+    <!-- Fiche recette -->
     <article id="recipe" hidden>
-      <h2 id="r-title"></h2>
-      <p id="r-meta" class="meta"></p>
+      <button id="back" class="link" type="button">← Retour</button>
 
-      <div class="servings">
-        <span>Portions</span>
-        <button id="minus" type="button" aria-label="Moins de portions">−</button>
-        <strong id="servings-value">4</strong>
-        <button id="plus" type="button" aria-label="Plus de portions">+</button>
+      <div id="recipe-read">
+        <h2 id="r-title"></h2>
+        <p id="r-meta" class="meta"></p>
+        <p id="r-tags" class="tags" hidden></p>
+
+        <div class="servings">
+          <span>Portions</span>
+          <button id="minus" type="button" aria-label="Moins de portions">−</button>
+          <strong id="servings-value">4</strong>
+          <button id="plus" type="button" aria-label="Plus de portions">+</button>
+        </div>
+
+        <div id="r-warnings" class="warnings" hidden></div>
+
+        <h3>Ingrédients</h3>
+        <ul id="r-ingredients" class="ingredients"></ul>
+
+        <h3>Préparation</h3>
+        <ol id="r-steps" class="steps"></ol>
+
+        <div id="r-tips-wrap" hidden>
+          <h3>Astuces</h3>
+          <ul id="r-tips"></ul>
+        </div>
+
+        <p id="r-source" class="source" hidden>
+          Vidéo d'origine :
+          <a id="r-source-link" href="#" target="_blank" rel="noopener noreferrer">ouvrir sur YouTube ↗</a>
+        </p>
+
+        <div class="actions">
+          <button id="cook-start" class="primary" type="button">Mode cuisine</button>
+          <button id="save" class="accent" type="button">Enregistrer</button>
+          <button id="edit" type="button">Modifier</button>
+          <button id="copy-list" type="button">Copier la liste de courses</button>
+          <button id="share" type="button" hidden>Partager</button>
+          <button id="refresh" type="button" hidden>Réextraire (nouvel appel)</button>
+        </div>
       </div>
 
-      <div id="r-warnings" class="warnings" hidden></div>
-
-      <h3>Ingrédients</h3>
-      <ul id="r-ingredients" class="ingredients"></ul>
-
-      <h3>Préparation</h3>
-      <ol id="r-steps" class="steps"></ol>
-
-      <div id="r-tips-wrap" hidden>
-        <h3>Astuces</h3>
-        <ul id="r-tips"></ul>
-      </div>
-
-      <p id="r-source" class="source" hidden>
-        Vidéo d'origine :
-        <a id="r-source-link" href="#" target="_blank" rel="noopener noreferrer">ouvrir sur YouTube ↗</a>
-      </p>
-
-      <div class="actions">
-        <button id="save" class="primary" type="button">Enregistrer</button>
-        <button id="copy-list" type="button">Copier la liste de courses</button>
-        <button id="share" type="button" hidden>Partager</button>
-        <button id="refresh" type="button" hidden>Réextraire (nouvel appel)</button>
-      </div>
+      <form id="recipe-edit" class="edit" hidden></form>
     </article>
 
     <!-- Recettes enregistrées -->
     <section id="view-saved" hidden>
+      <div class="toolbar">
+        <input id="search" type="search" placeholder="Rechercher (titre, ingrédient, mot-clé)…" aria-label="Rechercher une recette">
+        <div id="cat-filters" class="chips" role="group" aria-label="Filtrer par catégorie"></div>
+      </div>
+
       <p id="saved-empty" class="hint">Aucune recette enregistrée pour l'instant.</p>
+      <p id="saved-none" class="hint" hidden>Aucune recette ne correspond à cette recherche.</p>
       <ul id="saved-list" class="saved"></ul>
+
+      <div class="actions saved-actions">
+        <button id="make-list" class="primary" type="button" disabled>Liste de courses</button>
+      </div>
+
+      <div class="backup">
+        <h3>Sauvegarde</h3>
+        <p class="hint">Tes recettes sont stockées sur cet appareil seulement : effacer les données du navigateur ou changer de téléphone les supprime. Exporte-les de temps en temps.</p>
+        <p id="last-export" class="hint"></p>
+        <div class="actions">
+          <button id="export" type="button">Exporter mes recettes</button>
+          <button id="import" type="button">Importer un fichier</button>
+          <input id="import-file" type="file" accept="application/json,.json" hidden>
+        </div>
+      </div>
+    </section>
+
+    <!-- Liste de courses groupée -->
+    <section id="view-shopping" hidden>
+      <button id="shopping-back" class="link" type="button">← Retour aux recettes</button>
+      <h2>Liste de courses</h2>
+      <p id="shopping-from" class="meta"></p>
+      <ul id="shopping-list" class="ingredients"></ul>
+      <div class="actions">
+        <button id="shopping-copy" class="primary" type="button">Copier la liste</button>
+      </div>
     </section>
   </main>
 
+  <!-- Mode cuisine -->
+  <div id="cook" class="cook" role="dialog" aria-modal="true" aria-label="Mode cuisine" hidden>
+    <header class="cook-top">
+      <strong id="cook-title"></strong>
+      <button id="cook-quit" type="button">Quitter</button>
+    </header>
+    <button id="cook-alert" class="cook-alert" type="button" role="alert" hidden></button>
+    <div id="cook-body" class="cook-body"></div>
+    <div id="cook-timer" class="cook-timer" hidden>
+      <span id="cook-clock" class="clock" aria-live="off">00:00</span>
+      <button id="cook-timer-toggle" class="primary" type="button">Démarrer</button>
+      <button id="cook-timer-reset" type="button">Remettre à zéro</button>
+    </div>
+    <p id="cook-others" class="cook-note"></p>
+    <p id="cook-wake" class="cook-note"></p>
+    <footer class="cook-nav">
+      <button id="cook-prev" type="button">Précédent</button>
+      <span id="cook-progress"></span>
+      <button id="cook-next" class="primary" type="button">Suivant</button>
+    </footer>
+  </div>
+
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
-  <script src="/app.js" defer></script>
+  <script type="module" src="/app.js"></script>
 </body>
 </html>

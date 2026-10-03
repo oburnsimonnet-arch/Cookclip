@@ -12,9 +12,24 @@ export interface Step {
   durationMin: number | null;
 }
 
+/** Catégories proposées pour ranger les recettes (même liste côté application). */
+export const CATEGORIES = [
+  "entrée",
+  "plat",
+  "dessert",
+  "boisson",
+  "apéritif",
+  "sauce",
+  "pain et pâtisserie",
+  "autre",
+] as const;
+
 export interface Recipe {
   title: string;
   language: string;
+  category: string | null;
+  /** Mots-clés courts (régime, rapidité, matériel…), 6 au maximum */
+  tags: string[];
   servings: number | null;
   prepTimeMin: number | null;
   cookTimeMin: number | null;
@@ -23,6 +38,20 @@ export interface Recipe {
   tips: string[];
   /** Remarques sur la fiabilité de l'extraction (quantités manquantes, etc.) */
   warnings: string[];
+}
+
+/** Ramène la catégorie proposée par le modèle à l'une des catégories connues. */
+export function normalizeCategory(v: unknown): string | null {
+  const s = typeof v === "string" ? v.trim().toLowerCase() : "";
+  if (!s) return null;
+  if (/^entr[ée]e/.test(s)) return "entrée";
+  if (/^plat/.test(s)) return "plat";
+  if (/^dessert|^g[âa]teau/.test(s)) return "dessert";
+  if (/^boisson|^cocktail/.test(s)) return "boisson";
+  if (/^ap[ée]ro/.test(s)) return "apéritif";
+  if (/^sauce|^condiment/.test(s)) return "sauce";
+  if (/^pain|p[âa]tisserie|viennoiserie/.test(s)) return "pain et pâtisserie";
+  return "autre";
 }
 
 const str = (v: unknown): string | null =>
@@ -97,9 +126,15 @@ export function normalizeRecipe(raw: unknown): Recipe {
   const strList = (v: unknown): string[] =>
     (Array.isArray(v) ? v : []).map(str).filter((x): x is string => x !== null);
 
+  const tags = [
+    ...new Set(strList(r.tags).map((t) => t.toLowerCase().slice(0, 30))),
+  ].slice(0, 6);
+
   return {
     title: str(r.title) ?? "Recette sans titre",
     language: str(r.language) ?? "fr",
+    category: normalizeCategory(r.category),
+    tags,
     servings: num(r.servings),
     prepTimeMin: num(r.prepTimeMin),
     cookTimeMin: num(r.cookTimeMin),

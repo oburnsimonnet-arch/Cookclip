@@ -14,6 +14,8 @@ export const SAMPLE_MODEL_REPLY = `Voici la recette :
   "isRecipe": true,
   "title": "Pâte à crêpes",
   "language": "fr",
+  "category": "dessert",
+  "tags": ["rapide", "végétarien"],
   "servings": 6,
   "prepTimeMin": 10,
   "cookTimeMin": null,
