@@ -48,6 +48,7 @@ npx vercel dev               # lance le site et l'API en local
 - **YouTube uniquement** : l'API Gemini ne lit que les liens YouTube. TikTok et Instagram demanderaient une autre approche.
 - **Vidéos publiques uniquement** : les vidéos privées ou non répertoriées ne sont pas lisibles par Gemini.
 - **Quota** : en offre gratuite, Gemini 3.8 Flash est limité (à la date de rédaction) à 5 requêtes par minute et 20 par jour, plus 8 heures de vidéo YouTube par jour. Tes limites réelles sont sur [aistudio.google.com/rate-limit](https://aistudio.google.com/rate-limit). Pas de relance automatique côté serveur (elles consomment le quota). Vérifie les tarifs de l'offre payante : l'analyse d'une vidéo coûte plus qu'un simple texte.
+- **Lien de la vidéo** : chaque fiche garde le lien de la vidéo d'origine, affiché en bas de la recette et conservé à l'enregistrement. Il est aussi ajouté au texte du bouton « Partager ».
 - **Mémoire locale** : chaque recette extraite est gardée sur l'appareil (40 dernières vidéos). Rouvrir le même lien, quel que soit son format, n'appelle donc pas Gemini. Le bouton « Réextraire » force un nouvel appel si la recette est fausse.
 - **Durée de traitement** : compte jusqu'à une minute. La fonction Vercel est limitée à 60 secondes, ce qui peut couper les très longues vidéos.
 - **Quantités approximatives** : « un peu de », « à l'œil » restent sans valeur et sont signalées.

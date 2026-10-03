@@ -149,6 +149,9 @@ function renderRecipe() {
   $("recipe").hidden = false;
   $("share").hidden = !navigator.share;
   $("refresh").hidden = !current.videoId;
+  const sourceUrl = videoUrl(current.videoId);
+  $("r-source").hidden = !sourceUrl;
+  if (sourceUrl) $("r-source-link").href = sourceUrl;
   window.scrollTo({ top: 0 });
 }
 
@@ -188,6 +191,11 @@ function videoIdFrom(input) {
     if (p) return p[1];
   }
   return null;
+}
+
+/** Lien de la vidéo d'origine (null si l'identifiant est absent ou invalide). */
+function videoUrl(id) {
+  return id && ID_RE.test(id) ? "https://www.youtube.com/watch?v=" + id : null;
 }
 
 function readCache() {
@@ -305,7 +313,7 @@ $("share").addEventListener("click", async () => {
       title: current.recipe.title,
       text: `${current.recipe.title}\n\n${shoppingText()}\n\n${current.recipe.steps
         .map((s, i) => `${i + 1}. ${s.text}`)
-        .join("\n")}`,
+        .join("\n")}${videoUrl(current.videoId) ? "\n\nVidéo : " + videoUrl(current.videoId) : ""}`,
     });
   } catch {
     /* annulé par l'utilisateur */
@@ -315,8 +323,23 @@ $("share").addEventListener("click", async () => {
 $("save").addEventListener("click", () => {
   const list = loadSaved();
   const id = current.recipe.title + "|" + current.recipe.steps.length;
-  if (list.some((r) => r.id === id)) return toast("Déjà enregistrée");
-  list.unshift({ id, savedAt: Date.now(), recipe: current.recipe, servings: current.servings });
+  const existing = list.find((r) => r.id === id);
+  if (existing) {
+    // fiche enregistrée avant l'ajout du lien : on lui rattache la vidéo
+    if (!existing.videoId && current.videoId) {
+      existing.videoId = current.videoId;
+      storeSaved(list);
+      return toast("Lien de la vidéo ajouté à la fiche enregistrée");
+    }
+    return toast("Déjà enregistrée");
+  }
+  list.unshift({
+    id,
+    savedAt: Date.now(),
+    recipe: current.recipe,
+    servings: current.servings,
+    videoId: current.videoId || null,
+  });
   storeSaved(list);
   toast("Recette enregistrée");
 });
@@ -344,7 +367,7 @@ function renderSaved() {
     open.type = "button";
     open.className = "open";
     open.textContent = item.recipe.title;
-    open.addEventListener("click", () => showRecipe(item.recipe, item.servings));
+    open.addEventListener("click", () => showRecipe(item.recipe, item.servings, item.videoId || null));
     const del = document.createElement("button");
     del.type = "button";
     del.className = "del";
