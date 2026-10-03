@@ -57,7 +57,9 @@ const BASE_CONFIG = {
   // Large marge : sur les modèles « réflexion », les tokens de réflexion comptent dans cette limite.
   maxOutputTokens: 16_384,
   // Vercel coupe la fonction à 60 s ; on s'arrête un peu avant pour répondre proprement.
-  httpOptions: { timeout: 55_000 },
+  // attempts: 1 = aucune relance automatique. Par défaut le SDK retente jusqu'à 5 fois en cas
+  // d'erreur 429/5xx, et chaque relance consomme le quota (limite gratuite : 20 requêtes/jour).
+  httpOptions: { timeout: 55_000, retryOptions: { attempts: 1 } },
 };
 
 function parseResponse(text: string | undefined): Recipe {

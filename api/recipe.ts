@@ -60,6 +60,7 @@ function sendError(res: VercelResponse, err: unknown) {
     return res.status(422).json({ error: message });
   }
   if (status === 429) {
+    console.error("Quota Gemini atteint :", message);
     return res.status(429).json({
       error: "Limite d'utilisation de Gemini atteinte. Réessaie dans quelques minutes.",
     });

@@ -117,6 +117,8 @@ test("vidéo : envoie le lien canonique à Gemini avec les bons réglages", asyn
   assert.equal(call.config.systemInstruction, SYSTEM_PROMPT);
   assert.equal(call.config.responseMimeType, "application/json");
   assert.ok(call.config.httpOptions.timeout < 60_000);
+  // pas de relance automatique : chaque relance consommerait du quota
+  assert.equal(call.config.httpOptions.retryOptions.attempts, 1);
 });
 
 test("vidéo : GEMINI_MODEL permet de changer de modèle", async () => {
