@@ -1,11 +1,31 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { extractVideoId, decodeEntities } from "../lib/youtube.js";
+import { canonicalVideoUrl, extractVideoId } from "../lib/youtube.js";
 import { extractJson, normalizeRecipe } from "../lib/recipe.js";
-import { buildUserMessage, extractRecipe, SYSTEM_PROMPT } from "../lib/extract.js";
+import {
+  buildTextMessage,
+  DEFAULT_MODEL,
+  extractRecipeFromText,
+  extractRecipeFromVideo,
+  SYSTEM_PROMPT,
+} from "../lib/extract.js";
 import { SAMPLE_MODEL_REPLY, SAMPLE_TRANSCRIPT } from "./fixtures.js";
 
 const ID = "dQw4w9WgXcQ";
+
+/** Faux client Gemini : enregistre l'appel et renvoie la réponse voulue. */
+function fakeGemini(text: string | undefined) {
+  const calls: any[] = [];
+  const client = {
+    models: {
+      generateContent: async (params: any) => {
+        calls.push(params);
+        return { text };
+      },
+    },
+  } as any;
+  return { client, calls };
+}
 
 test("extractVideoId : formats de liens YouTube", () => {
   assert.equal(extractVideoId(`https://www.youtube.com/watch?v=${ID}`), ID);
@@ -17,10 +37,7 @@ test("extractVideoId : formats de liens YouTube", () => {
 });
 
 test("extractVideoId : texte de partage Android (titre + lien)", () => {
-  assert.equal(
-    extractVideoId(`Pâte à crêpes facile https://youtu.be/${ID}`),
-    ID,
-  );
+  assert.equal(extractVideoId(`Pâte à crêpes facile https://youtu.be/${ID}`), ID);
 });
 
 test("extractVideoId : liens non pris en charge", () => {
@@ -30,8 +47,8 @@ test("extractVideoId : liens non pris en charge", () => {
   assert.equal(extractVideoId(""), null);
 });
 
-test("decodeEntities", () => {
-  assert.equal(decodeEntities("l&amp;#39;oeuf &amp; le lait"), "l'oeuf & le lait");
+test("canonicalVideoUrl : lien propre quel que soit le format d'origine", () => {
+  assert.equal(canonicalVideoUrl(ID), `https://www.youtube.com/watch?v=${ID}`);
 });
 
 test("extractJson : accepte les blocs ```json et le texte autour", () => {
@@ -85,42 +102,69 @@ test("normalizeRecipe : rejette ce qui n'est pas une recette", () => {
   assert.throws(() => normalizeRecipe("n'importe quoi"));
 });
 
-test("buildUserMessage : tronque les contenus trop longs", () => {
-  const msg = buildUserMessage({
+test("vidéo : envoie le lien canonique à Gemini avec les bons réglages", async () => {
+  const { client, calls } = fakeGemini(SAMPLE_MODEL_REPLY);
+  const recipe = await extractRecipeFromVideo(ID, client);
+
+  assert.equal(recipe.title, "Pâte à crêpes");
+  assert.equal(recipe.ingredients.length, 7);
+
+  assert.equal(calls.length, 1);
+  const call = calls[0];
+  assert.equal(call.model, DEFAULT_MODEL);
+  assert.equal(call.contents[0].fileData.fileUri, `https://www.youtube.com/watch?v=${ID}`);
+  assert.equal(typeof call.contents[1].text, "string");
+  assert.equal(call.config.systemInstruction, SYSTEM_PROMPT);
+  assert.equal(call.config.responseMimeType, "application/json");
+  assert.ok(call.config.httpOptions.timeout < 60_000);
+});
+
+test("vidéo : GEMINI_MODEL permet de changer de modèle", async () => {
+  const { client, calls } = fakeGemini(SAMPLE_MODEL_REPLY);
+  process.env.GEMINI_MODEL = "gemini-test";
+  try {
+    await extractRecipeFromVideo(ID, client);
+  } finally {
+    delete process.env.GEMINI_MODEL;
+  }
+  assert.equal(calls[0].model, "gemini-test");
+});
+
+test("vidéo : réponse vide de Gemini -> erreur claire", async () => {
+  const { client } = fakeGemini(undefined);
+  await assert.rejects(() => extractRecipeFromVideo(ID, client), /aucune réponse/);
+  const { client: client2 } = fakeGemini("   ");
+  await assert.rejects(() => extractRecipeFromVideo(ID, client2), /aucune réponse/);
+});
+
+test("vidéo : Gemini dit que ce n'est pas une recette", async () => {
+  const { client } = fakeGemini('{"isRecipe": false}');
+  await assert.rejects(() => extractRecipeFromVideo(ID, client), /ne semble pas contenir/);
+});
+
+test("texte : la transcription collée est envoyée sans fileData", async () => {
+  const { client, calls } = fakeGemini(SAMPLE_MODEL_REPLY);
+  const recipe = await extractRecipeFromText(
+    { title: "Pâte à crêpes", transcript: SAMPLE_TRANSCRIPT },
+    client,
+  );
+  assert.equal(recipe.servings, 6);
+  assert.equal(typeof calls[0].contents, "string");
+  assert.ok(calls[0].contents.includes("250 grammes de farine"));
+  assert.ok(calls[0].contents.startsWith("TITRE :\nPâte à crêpes"));
+});
+
+test("texte : tronque les contenus trop longs", () => {
+  const msg = buildTextMessage({
     title: "Titre",
     description: "d".repeat(20_000),
     transcript: "t".repeat(200_000),
   });
   assert.ok(msg.length < 8_000 + 90_000 + 200);
-  assert.ok(msg.startsWith("TITRE :\nTitre"));
 });
 
-test("extractRecipe : de bout en bout avec un client simulé", async () => {
-  let captured: any = null;
-  const fakeClient = {
-    messages: {
-      create: async (params: any) => {
-        captured = params;
-        return { content: [{ type: "text", text: SAMPLE_MODEL_REPLY }] };
-      },
-    },
-  } as any;
-
-  const recipe = await extractRecipe(
-    { title: "Pâte à crêpes", transcript: SAMPLE_TRANSCRIPT },
-    fakeClient,
-  );
-
-  assert.equal(recipe.title, "Pâte à crêpes");
-  assert.equal(recipe.ingredients.length, 7);
-  assert.equal(captured.system, SYSTEM_PROMPT);
-  assert.equal(captured.temperature, 0);
-  assert.ok(captured.messages[0].content.includes("250 grammes de farine"));
-});
-
-test("extractRecipe : refuse un contenu vide sans appeler le modèle", async () => {
-  const fakeClient = {
-    messages: { create: async () => assert.fail("ne doit pas être appelé") },
-  } as any;
-  await assert.rejects(() => extractRecipe({ title: "x" }, fakeClient), /Aucun contenu/);
+test("texte : refuse une transcription vide sans appeler Gemini", async () => {
+  const { client, calls } = fakeGemini(SAMPLE_MODEL_REPLY);
+  await assert.rejects(() => extractRecipeFromText({ transcript: "  " }, client), /Aucun contenu/);
+  assert.equal(calls.length, 0);
 });

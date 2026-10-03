@@ -161,7 +161,7 @@ function showRecipe(recipe, servings) {
 async function extract(payload) {
   const btn = $("go");
   btn.disabled = true;
-  setStatus("Lecture de la vidéo et extraction de la recette… (10 à 30 secondes)");
+  setStatus("Lecture de la vidéo et extraction de la recette… (jusqu'à une minute)");
   try {
     const res = await fetch("/api/recipe", {
       method: "POST",
@@ -170,7 +170,7 @@ async function extract(payload) {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      if (data.code === "NO_TRANSCRIPT") $("manual").open = true;
+      if (data.code === "VIDEO_UNREADABLE") $("manual").open = true;
       throw new Error(data.error || "Erreur " + res.status);
     }
     setStatus("");

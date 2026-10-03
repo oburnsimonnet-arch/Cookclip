@@ -1,5 +1,3 @@
-import { YoutubeTranscript } from "youtube-transcript";
-
 const ID_RE = /^[A-Za-z0-9_-]{11}$/;
 
 /** Extrait l'identifiant d'une vidéo YouTube depuis un lien (watch, youtu.be, shorts, embed) ou un texte partagé. */
@@ -31,76 +29,7 @@ export function extractVideoId(input: string): string | null {
   return null;
 }
 
-export interface VideoInfo {
-  id: string;
-  title: string | null;
-  description: string | null;
-  transcript: string | null;
-}
-
-/** Récupère titre et description depuis la page de la vidéo. Échec silencieux : c'est un bonus. */
-async function fetchPageDetails(
-  id: string,
-): Promise<{ title: string | null; description: string | null }> {
-  try {
-    const res = await fetch(`https://www.youtube.com/watch?v=${id}&hl=fr`, {
-      headers: {
-        "user-agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
-        "accept-language": "fr-FR,fr;q=0.9,en;q=0.8",
-        cookie: "CONSENT=YES+1",
-      },
-      signal: AbortSignal.timeout(8000),
-    });
-    if (!res.ok) return { title: null, description: null };
-    const html = await res.text();
-    const m = html.match(/"videoDetails":(\{.*?"isLiveContent")/s);
-    if (!m) return { title: null, description: null };
-    const details = JSON.parse(m[1] + "}") as {
-      title?: string;
-      shortDescription?: string;
-    };
-    return {
-      title: details.title ?? null,
-      description: details.shortDescription ?? null,
-    };
-  } catch {
-    return { title: null, description: null };
-  }
-}
-
-async function fetchTranscript(id: string): Promise<string | null> {
-  for (const lang of ["fr", "en", undefined]) {
-    try {
-      const parts = await YoutubeTranscript.fetchTranscript(
-        id,
-        lang ? { lang } : undefined,
-      );
-      const text = parts
-        .map((p) => p.text.replace(/\s+/g, " ").trim())
-        .filter(Boolean)
-        .join(" ");
-      if (text) return decodeEntities(text);
-    } catch {
-      // essaie la langue suivante
-    }
-  }
-  return null;
-}
-
-export function decodeEntities(s: string): string {
-  return s
-    .replace(/&amp;#39;|&#39;|&apos;/g, "'")
-    .replace(/&quot;/g, '"')
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">");
-}
-
-export async function fetchVideoInfo(id: string): Promise<VideoInfo> {
-  const [page, transcript] = await Promise.all([
-    fetchPageDetails(id),
-    fetchTranscript(id),
-  ]);
-  return { id, ...page, transcript };
+/** Lien canonique envoyé à Gemini : sans paramètres de suivi, sans horodatage, quel que soit le format d'origine. */
+export function canonicalVideoUrl(id: string): string {
+  return `https://www.youtube.com/watch?v=${id}`;
 }

@@ -2,14 +2,16 @@
 
 Colle (ou partage) le lien d'une vidéo de cuisine YouTube : Cookclip en extrait la recette — ingrédients, étapes, temps — avec ajustement des portions et liste de courses.
 
-PWA installable sur Android + une route serverless (`/api/recipe`) qui lit la transcription de la vidéo et demande à Claude de la structurer.
+PWA installable sur Android + une route serverless (`/api/recipe`) qui confie la vidéo à Gemini et renvoie une recette structurée.
 
 ## Comment ça marche
 
 1. Le front envoie le lien à `POST /api/recipe`.
-2. Le backend récupère la **transcription** et la **description** de la vidéo YouTube.
-3. Claude les transforme en JSON structuré. Il a pour consigne de ne **jamais inventer** une quantité : ce qui n'est pas dit est marqué « quantité non précisée ».
+2. Le backend transmet le lien YouTube à **Gemini**, qui regarde et écoute la vidéo : voix, texte affiché à l'écran (quantités incrustées) et images.
+3. Gemini renvoie la recette en JSON. Il a pour consigne de ne **jamais inventer** une quantité : ce qui n'est pas dit ni affiché est marqué « quantité non précisée ».
 4. Le JSON est validé (`lib/recipe.ts`) avant d'être renvoyé à l'application.
+
+Si la vidéo ne peut pas être lue, l'application propose de **coller la transcription à la main** ; Gemini la traite alors comme du texte.
 
 La clé d'API reste côté serveur, jamais dans l'application.
 
@@ -17,9 +19,11 @@ La clé d'API reste côté serveur, jamais dans l'application.
 
 1. Sur [vercel.com](https://vercel.com) : **Add New… → Project**, puis importe ce dépôt GitHub. Aucun réglage de build à changer.
 2. Dans **Settings → Environment Variables**, ajoute :
-   - `ANTHROPIC_API_KEY` : ta clé, créée sur [console.anthropic.com](https://console.anthropic.com).
-   - *(optionnel)* `CLAUDE_MODEL` : pour changer de modèle (défaut : `claude-sonnet-5-5`).
+   - `GEMINI_API_KEY` : ta clé, créée sur [aistudio.google.com/apikey](https://aistudio.google.com/apikey).
+   - *(optionnel)* `GEMINI_MODEL` : pour changer de modèle (défaut : `gemini-3.8-flash`).
 3. Redéploie (**Deployments → Redeploy**) pour que la variable soit prise en compte.
+
+> Ne mets jamais la clé dans le code ni dans GitHub : uniquement dans les variables d'environnement de Vercel.
 
 ## Installer sur Android
 
@@ -33,7 +37,7 @@ La clé d'API reste côté serveur, jamais dans l'application.
 
 ```bash
 npm install
-cp .env.example .env.local   # puis renseigne ANTHROPIC_API_KEY
+cp .env.example .env.local   # puis renseigne GEMINI_API_KEY
 npm run typecheck
 npm test                     # tests de la logique, sans appel réseau ni clé
 npx vercel dev               # lance le site et l'API en local
@@ -41,8 +45,10 @@ npx vercel dev               # lance le site et l'API en local
 
 ## Limites connues
 
-- **YouTube uniquement** pour l'instant. TikTok et Instagram demandent une autre approche (analyse des images), prévue plus tard.
-- **La récupération de la transcription peut échouer** : YouTube bloque parfois les requêtes venant des serveurs (dont Vercel) et certaines vidéos n'ont pas de sous-titres. Dans ce cas, l'application propose de **coller la transcription à la main** (YouTube → « … plus » → « Afficher la transcription »).
+- **YouTube uniquement** : l'API Gemini ne lit que les liens YouTube. TikTok et Instagram demanderaient une autre approche.
+- **Vidéos publiques uniquement** : les vidéos privées ou non répertoriées ne sont pas lisibles par Gemini.
+- **Quota** : en offre gratuite, Gemini limite à 8 heures de vidéo YouTube par jour ; pas de limite en offre payante. Vérifie les tarifs : l'analyse d'une vidéo coûte plus qu'un simple texte.
+- **Durée de traitement** : compte jusqu'à une minute. La fonction Vercel est limitée à 60 secondes, ce qui peut couper les très longues vidéos.
 - **Quantités approximatives** : « un peu de », « à l'œil » restent sans valeur et sont signalées.
 - Les recettes enregistrées sont stockées **sur l'appareil** (pas de compte, pas de synchronisation).
 
@@ -50,8 +56,8 @@ npx vercel dev               # lance le site et l'API en local
 
 ```
 api/recipe.ts      route serverless
-lib/youtube.ts     lien → identifiant, transcription, description
-lib/extract.ts     prompt + appel à Claude
+lib/youtube.ts     lien → identifiant de vidéo
+lib/extract.ts     prompt + appels à Gemini (vidéo, ou texte en secours)
 lib/recipe.ts      types, extraction et validation du JSON
 public/            PWA (HTML, CSS, JS, manifeste, service worker, icônes)
 tests/             tests unitaires
@@ -59,7 +65,7 @@ tests/             tests unitaires
 
 ## Idées pour la suite
 
-- Prise en charge de TikTok / Instagram (analyse d'images clés)
+- Prise en charge de TikTok / Instagram
 - Liste de courses regroupée entre plusieurs recettes
 - Mode cuisine : écran allumé, étapes une par une, minuteurs
 - Export de la recette (PDF, partage)

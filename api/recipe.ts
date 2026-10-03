@@ -1,21 +1,21 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { extractRecipe } from "../lib/extract.js";
-import { extractVideoId, fetchVideoInfo } from "../lib/youtube.js";
+import { extractRecipeFromText, extractRecipeFromVideo } from "../lib/extract.js";
+import { extractVideoId } from "../lib/youtube.js";
 
 export const config = { maxDuration: 60 };
 
 /**
  * POST /api/recipe
  * Corps JSON, l'un des deux :
- *   { "url": "https://youtu.be/..." }
- *   { "transcript": "texte collé à la main", "title"?: "...", "description"?: "..." }
+ *   { "url": "https://youtu.be/..." }                         -> Gemini analyse la vidéo
+ *   { "transcript": "texte collé", "title"?, "description"? } -> secours, texte uniquement
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
     return res.status(405).json({ error: "Méthode non autorisée." });
   }
-  if (!process.env.ANTHROPIC_API_KEY) {
+  if (!process.env.GEMINI_API_KEY) {
     return res
       .status(500)
       .json({ error: "Le serveur n'est pas configuré (clé d'API manquante)." });
@@ -25,52 +25,55 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { url, transcript, title, description } = body as Record<string, unknown>;
 
   try {
-    let input: { title?: string | null; description?: string | null; transcript?: string | null };
-    let source: { videoId: string | null; transcriptFound: boolean };
-
     if (typeof transcript === "string" && transcript.trim().length > 40) {
-      input = {
+      const recipe = await extractRecipeFromText({
+        transcript,
         title: typeof title === "string" ? title : null,
         description: typeof description === "string" ? description : null,
-        transcript,
-      };
-      source = { videoId: null, transcriptFound: true };
-    } else if (typeof url === "string" && url.trim()) {
+      });
+      return res.status(200).json({ recipe, source: { method: "transcript" } });
+    }
+
+    if (typeof url === "string" && url.trim()) {
       const id = extractVideoId(url);
       if (!id) {
         return res.status(400).json({
           error: "Lien non reconnu. Pour l'instant, seuls les liens YouTube sont pris en charge.",
         });
       }
-      const info = await fetchVideoInfo(id);
-      if (!info.transcript && !info.description) {
-        return res.status(422).json({
-          error:
-            "Impossible de récupérer la transcription de cette vidéo (sous-titres absents ou accès bloqué). Colle la transcription à la main.",
-          code: "NO_TRANSCRIPT",
-        });
-      }
-      input = info;
-      source = { videoId: id, transcriptFound: !!info.transcript };
-    } else {
-      return res.status(400).json({ error: "Fournis un lien YouTube ou une transcription." });
+      const recipe = await extractRecipeFromVideo(id);
+      return res.status(200).json({ recipe, source: { method: "video", videoId: id } });
     }
 
-    const recipe = await extractRecipe(input);
-    if (!source.transcriptFound) {
-      recipe.warnings.push(
-        "Pas de transcription disponible : la recette vient uniquement de la description de la vidéo.",
-      );
-    }
-    return res.status(200).json({ recipe, source });
+    return res.status(400).json({ error: "Fournis un lien YouTube ou une transcription." });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Erreur inconnue.";
-    const userFacing =
-      message.startsWith("Cette vidéo") || message.startsWith("Aucune recette");
-    return res.status(userFacing ? 422 : 500).json({
-      error: userFacing ? message : "L'extraction a échoué. Réessaie dans un instant.",
+    return sendError(res, err);
+  }
+}
+
+function sendError(res: VercelResponse, err: unknown) {
+  const message = err instanceof Error ? err.message : "Erreur inconnue.";
+  const status = (err as { status?: number } | null)?.status;
+
+  // Erreurs « métier » levées par la validation de la recette
+  if (message.startsWith("Cette vidéo") || message.startsWith("Aucune recette")) {
+    return res.status(422).json({ error: message });
+  }
+  if (status === 429) {
+    return res.status(429).json({
+      error: "Limite d'utilisation de Gemini atteinte. Réessaie dans quelques minutes.",
     });
   }
+  if (status === 400 || status === 403 || status === 404) {
+    console.error("Gemini a refusé la vidéo :", status, message);
+    return res.status(422).json({
+      error:
+        "Gemini n'a pas pu lire cette vidéo (privée, non répertoriée, supprimée ou restreinte). Colle la transcription à la main.",
+      code: "VIDEO_UNREADABLE",
+    });
+  }
+  console.error("Échec de l'extraction :", status ?? "", message);
+  return res.status(500).json({ error: "L'extraction a échoué. Réessaie dans un instant." });
 }
 
 function safeParse(s: string): unknown {
