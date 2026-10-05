@@ -1,3 +1,5 @@
+import { cleanThemes } from "./themes.js";
+
 /** Catégories proposées (même liste que côté serveur, lib/recipe.ts). */
 export const CATEGORIES = [
   "entrée",
@@ -23,6 +25,16 @@ const num = (v) => {
   }
   return null;
 };
+
+// Un seul emoji (éventuellement composé : teinte, séquence avec liant invisible)
+const EMOJI_RE =
+  /^\p{Extended_Pictographic}\uFE0F?[\u{1F3FB}-\u{1F3FF}]?(?:\u200D\p{Extended_Pictographic}\uFE0F?[\u{1F3FB}-\u{1F3FF}]?)*$/u;
+
+export function cleanEmoji(v) {
+  if (typeof v !== "string") return null;
+  const s = v.trim();
+  return s && s.length <= 16 && EMOJI_RE.test(s) ? s : null;
+}
 
 const strList = (v, max) =>
   (Array.isArray(v) ? v : []).map(str).filter(Boolean).slice(0, max);
@@ -70,6 +82,8 @@ export function sanitizeRecipe(raw) {
   return {
     title: (str(raw.title) || "Recette sans titre").slice(0, 200),
     language: str(raw.language) || "fr",
+    emoji: cleanEmoji(raw.emoji),
+    themes: cleanThemes(raw.themes ?? raw.theme),
     category: category && CATEGORIES.includes(category) ? category : category ? "autre" : null,
     tags: [...new Set(strList(raw.tags, 12).map((t) => t.toLowerCase().slice(0, 30)))].slice(0, 6),
     servings: num(raw.servings) ? Math.round(num(raw.servings)) : null,

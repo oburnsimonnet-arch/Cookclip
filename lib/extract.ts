@@ -1,5 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
-import { CATEGORIES, extractJson, normalizeRecipe, type Recipe } from "./recipe.js";
+import { CATEGORIES, THEMES, extractJson, normalizeRecipe, type Recipe } from "./recipe.js";
 import { canonicalVideoUrl } from "./youtube.js";
 
 export const DEFAULT_MODEL = "gemini-3.8-flash";
@@ -21,12 +21,17 @@ Règles strictes :
 10. Si le contenu n'est pas une recette de cuisine, renvoie {"isRecipe": false}.
 11. "category" : l'une de ces valeurs exactement : ${CATEGORIES.join(", ")}.
 12. "tags" : 0 à 5 mots-clés courts et vérifiables (ex. « végétarien » seulement si aucun ingrédient n'est de la viande ou du poisson ; « rapide », « four », « une poêle », « sans gluten » seulement si c'est évident). En cas de doute, n'en mets pas.
+13. "themes" : 1 ou 2 clés exactement parmi la liste ci-dessous (clé : sens). Mets d'abord la cuisine d'origine si elle est claire (france, italie, reunion, asie, orient, ameriques), puis éventuellement un style (rapide, leger, vegetarien, fetes, gourmandises, reconfort). N'ajoute une 2e clé que si elle est évidente. "rapide" seulement si préparation + cuisson font 30 minutes ou moins. "vegetarien" seulement si aucun ingrédient n'est de la viande, du poisson ou des fruits de mer. Si l'origine est incertaine, mets "monde".
+${THEMES.map((t) => `   - ${t.key} : ${t.hint}`).join("\n")}
+14. "emoji" : un seul emoji qui représente le plat (ex. 🥞 pour des crêpes, 🍲 pour un ragoût).
 
 Réponds UNIQUEMENT par un objet JSON, sans texte autour, de cette forme :
 {
   "isRecipe": true,
   "title": string,
   "language": "fr" | "en" | ...,
+  "emoji": string,
+  "themes": [string],
   "category": string,
   "tags": [string],
   "servings": number | null,

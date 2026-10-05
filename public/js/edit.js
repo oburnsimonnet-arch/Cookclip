@@ -1,18 +1,7 @@
 import { parseQty } from "./format.js";
-import { CATEGORIES } from "./sanitize.js";
-
-/** Petit constructeur d'éléments : jamais d'innerHTML, le texte des recettes reste du texte. */
-function h(tag, attrs = {}, ...children) {
-  const el = document.createElement(tag);
-  for (const [key, value] of Object.entries(attrs)) {
-    if (value === false || value === null || value === undefined) continue;
-    if (key === "class") el.className = value;
-    else if (key === "text") el.textContent = value;
-    else el.setAttribute(key, value === true ? "" : String(value));
-  }
-  el.append(...children);
-  return el;
-}
+import { CATEGORIES, cleanEmoji } from "./sanitize.js";
+import { h } from "./dom.js";
+import { MAX_THEMES, THEMES, canonicalTheme, cleanThemes, normText, themeInfo } from "./themes.js";
 
 const intOrNull = (text) => {
   const n = parseInt(String(text).trim(), 10);
@@ -94,9 +83,49 @@ export function createEditor(root, { onSubmit, onCancel }) {
     const cook = h("input", { type: "number", min: 0, inputmode: "numeric", "aria-label": "Cuisson en minutes", id: "e-cook" });
     cook.value = recipe.cookTimeMin ?? "";
 
+    const emoji = h("input", { type: "text", maxlength: 16, "aria-label": "Emoji du plat", id: "e-emoji", placeholder: "🍲" });
+    emoji.value = recipe.emoji ?? "";
+
+    // thématiques : 3 au plus, connues (puces) ou personnalisées (texte libre)
+    let themes = cleanThemes(recipe.themes);
+    const themeBox = h("div", { class: "chip-wrap", id: "e-themes", role: "group", "aria-label": "Thématiques" });
+    const themeHint = h("p", { class: "hint", id: "e-theme-hint", role: "status" });
+    const customInput = h("input", { type: "text", maxlength: 30, id: "e-theme-new", placeholder: "Autre thématique (ex. Repas de Noël)", "aria-label": "Nouvelle thématique" });
+    const customAdd = h("button", { type: "button", class: "btn", id: "e-theme-add", text: "Ajouter" });
+    const has = (key) => themes.some((t) => normText(t) === normText(key));
+    const toggleTheme = (key) => {
+      themeHint.textContent = "";
+      if (has(key)) themes = themes.filter((t) => normText(t) !== normText(key));
+      else if (themes.length >= MAX_THEMES) themeHint.textContent = `${MAX_THEMES} thématiques au maximum : retires-en une d'abord.`;
+      else themes = [...themes, key];
+      drawThemes();
+    };
+    function drawThemes() {
+      const keys = [...THEMES.map((t) => t.key), ...themes.filter((t) => !THEMES.some((k) => k.key === t))];
+      themeBox.replaceChildren(
+        ...keys.map((key) => {
+          const info = themeInfo(key);
+          return h("button", { type: "button", class: "chip", "data-theme": key, "aria-pressed": String(has(key)), onClick: () => toggleTheme(key) }, `${info.emoji} ${info.short}`);
+        }),
+      );
+    }
+    customAdd.addEventListener("click", () => {
+      const key = canonicalTheme(customInput.value);
+      customInput.value = "";
+      if (key && !has(key)) toggleTheme(key);
+      else if (key) themeHint.textContent = "Déjà choisie.";
+    });
+    customInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        customAdd.click();
+      }
+    });
+    drawThemes();
+
     const ingList = h("div", { class: "edit-list", id: "e-ingredients" });
     recipe.ingredients.forEach((i) => ingList.append(ingredientRow(i)));
-    const addIng = h("button", { type: "button", id: "e-add-ing", text: "+ Ingrédient" });
+    const addIng = h("button", { type: "button", class: "btn btn-soft", id: "e-add-ing", text: "+ Ingrédient" });
     addIng.addEventListener("click", () => {
       const row = ingredientRow();
       ingList.append(row);
@@ -105,7 +134,7 @@ export function createEditor(root, { onSubmit, onCancel }) {
 
     const stepList = h("div", { class: "edit-list", id: "e-steps" });
     recipe.steps.forEach((s) => stepList.append(stepRow(s)));
-    const addStep = h("button", { type: "button", id: "e-add-step", text: "+ Étape" });
+    const addStep = h("button", { type: "button", class: "btn btn-soft", id: "e-add-step", text: "+ Étape" });
     addStep.addEventListener("click", () => {
       const row = stepRow();
       stepList.append(row);
@@ -118,13 +147,19 @@ export function createEditor(root, { onSubmit, onCancel }) {
     }
 
     const error = h("p", { class: "status error", id: "e-error", role: "alert", hidden: true });
-    const cancel = h("button", { type: "button", id: "e-cancel", text: "Annuler" });
+    const cancel = h("button", { type: "button", class: "btn btn-block", id: "e-cancel", text: "Annuler" });
     cancel.addEventListener("click", () => onCancel());
 
     root.append(
       h("h2", { text: "Modifier la recette" }),
       field("Titre", title),
-      h("div", { class: "edit-grid" }, field("Catégorie", category), field("Portions", servings)),
+      h("div", { class: "edit-grid" }, field("Catégorie", category), field("Emoji du plat", emoji)),
+      h("div", { class: "edit-grid" }, field("Portions", servings), h("span")),
+      h("h3", { text: "Thématiques" }),
+      h("p", { class: "hint", text: "Jusqu'à 3. Elles servent à ranger la recette dans l'onglet Thèmes." }),
+      themeBox,
+      h("div", { class: "theme-add" }, customInput, customAdd),
+      themeHint,
       h("div", { class: "edit-grid" }, field("Préparation (min)", prep), field("Cuisson (min)", cook)),
       h("h3", { text: "Ingrédients" }),
       h("p", { class: "hint", text: "Laisse la quantité vide si elle n'est pas précisée (ex. « à l'œil »). Fractions acceptées : 1/2, 1 1/2." }),
@@ -137,7 +172,7 @@ export function createEditor(root, { onSubmit, onCancel }) {
         ? h("label", { class: "check" }, clearWarnings, " J'ai vérifié : retirer les avertissements")
         : "",
       error,
-      h("div", { class: "actions" }, h("button", { type: "submit", class: "primary", text: "Terminer" }), cancel),
+      h("div", { class: "actions" }, h("button", { type: "submit", class: "btn btn-primary btn-block", text: "Terminer" }), cancel),
     );
 
     root.onsubmit = (e) => {
@@ -158,9 +193,17 @@ export function createEditor(root, { onSubmit, onCancel }) {
         title.focus();
         return;
       }
+      if (emoji.value.trim() && !cleanEmoji(emoji.value)) {
+        error.textContent = "Un seul emoji, ou laisse vide.";
+        error.hidden = false;
+        emoji.focus();
+        return;
+      }
       onSubmit({
         ...recipe,
         title: title.value,
+        emoji: cleanEmoji(emoji.value),
+        themes,
         category: category.value || null,
         servings: intOrNull(servings.value),
         prepTimeMin: intOrNull(prep.value),

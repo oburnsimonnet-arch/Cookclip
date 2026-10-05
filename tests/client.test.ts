@@ -22,6 +22,8 @@ const RECIPE = {
   title: "Pâte à crêpes",
   language: "fr",
   category: "dessert",
+  emoji: "🥞",
+  themes: ["france", "rapide"],
   tags: ["rapide", "végétarien"],
   servings: 4,
   prepTimeMin: 10,
@@ -44,6 +46,8 @@ const SOUPE = {
   title: "Soupe de potiron",
   language: "fr",
   category: "plat",
+  emoji: null,
+  themes: ["reconfort"],
   tags: [],
   servings: 4,
   prepTimeMin: null,
@@ -173,9 +177,12 @@ test("extraction : la fiche s'affiche avec ingrédients, étapes, mots-clés et 
   assert.match(app.text("r-tags"), /dessert/);
   assert.match(app.text("r-tags"), /végétarien/);
   assert.match(app.text("r-warnings"), /temps de cuisson/);
+  assert.match(app.text("r-themes"), /Cuisine française/);
+  assert.match(app.text("r-themes"), /Plat rapide du soir/);
+  assert.equal(app.text("r-emoji"), "🥞");
   assert.equal(app.$("r-source-link").href, LINK);
   assert.equal(app.visible("recipe"), true);
-  assert.equal(app.visible("view-new"), false);
+  assert.equal(app.visible("view-home"), false);
 });
 
 test("extraction : une quantité absente est indiquée, une fraction est lisible", async () => {
@@ -314,7 +321,7 @@ test("enregistrement : la fiche garde le lien vidéo, se rouvre depuis la liste,
   assert.equal(app.saved().length, 1);
 
   await app.click("back");
-  await app.click("tab-saved");
+  await app.click("tab-home");
   assert.equal(app.$("saved-list").children.length, 1);
   await app.click(app.all("#saved-list .open")[0]);
   assert.equal(app.text("servings-value"), "5");
@@ -349,16 +356,24 @@ test("enregistrement : stockage plein -> message clair", async () => {
   assert.match(app.text("toast"), /Stockage plein/);
 });
 
-test("suppression : demande confirmation, puis retire la fiche", async () => {
+test("suppression : depuis la fiche, après confirmation, retire la recette et revient à la liste", async () => {
   const app = await boot({ storage: withSaved([savedItem(RECIPE)]) });
-  await app.click("tab-saved");
+  await app.click(app.all("#saved-list .open")[0]);
+  assert.equal(app.$("delete").hidden, false);
   app.w.confirm = () => false;
-  await app.click(app.all("#saved-list .del")[0]);
+  await app.click("delete");
   assert.equal(app.saved().length, 1);
   app.w.confirm = () => true;
-  await app.click(app.all("#saved-list .del")[0]);
+  await app.click("delete");
   assert.equal(app.saved().length, 0);
+  assert.equal(app.visible("view-home"), true);
   assert.equal(app.visible("saved-empty"), true);
+});
+
+test("suppression : une fiche non enregistrée n'a pas de bouton supprimer", async () => {
+  const app = await boot();
+  await app.extract(LINK);
+  assert.equal(app.$("delete").hidden, true);
 });
 
 /* ======================= Modification à la main ======================= */
@@ -435,7 +450,7 @@ test("modification : une fiche vide (sans ingrédient ni étape) est refusée", 
 
 test("modification : une fiche déjà enregistrée est mise à jour automatiquement", async () => {
   const app = await boot({ storage: withSaved([savedItem(RECIPE)]) });
-  await app.click("tab-saved");
+  await app.click("tab-home");
   await app.click(app.all("#saved-list .open")[0]);
   await openEditor(app);
   await app.type("e-title", "Titre corrigé");
@@ -585,7 +600,7 @@ const two = () =>
 
 test("rangement : recherche par titre, ingrédient ou mot-clé, sans tenir compte des accents", async () => {
   const app = await boot({ storage: two() });
-  await app.click("tab-saved");
+  await app.click("tab-home");
   assert.equal(app.$("saved-list").children.length, 2);
 
   await app.type("search", "CREPES");
@@ -604,24 +619,93 @@ test("rangement : recherche par titre, ingrédient ou mot-clé, sans tenir compt
   assert.equal(app.visible("saved-none"), true);
 });
 
-test("rangement : filtre par catégorie", async () => {
+test("rangement : filtre par thématique depuis l'accueil", async () => {
   const app = await boot({ storage: two() });
-  await app.click("tab-saved");
-  const chips = app.all("#cat-filters .chip");
-  assert.deepEqual(chips.map((c: any) => c.textContent), ["Toutes (2)", "plat (1)", "dessert (1)"]);
-  await app.click(chips[2]); // dessert
+  const chips = app.all("#theme-chips .chip");
+  assert.deepEqual(chips.map((c: any) => c.textContent), ["Toutes2", "🥖 France1", "⏱️ Rapide1", "🍲 Mijotés1"]);
+  await app.click(chips[3]);
   assert.equal(app.$("saved-list").children.length, 1);
-  assert.match(app.text("saved-list"), /Pâte à crêpes/);
-  await app.click(app.all("#cat-filters .chip")[0]); // Toutes
+  assert.match(app.text("saved-list"), /Soupe de potiron/);
+  await app.click(app.all("#theme-chips .chip")[0]);
   assert.equal(app.$("saved-list").children.length, 2);
+});
+
+test("thèmes : tuiles avec effectifs, liste d'une thématique, retour", async () => {
+  const app = await boot({ storage: two() });
+  await app.click("tab-themes");
+  assert.equal(app.visible("view-themes"), true);
+  const tiles = app.all("#theme-grid .tile");
+  assert.deepEqual(tiles.map((t: any) => t.querySelector("strong").textContent), ["Cuisine française", "Plat rapide du soir", "Plats mijotés"]);
+  await app.click(tiles[2]);
+  assert.equal(app.visible("view-theme"), true);
+  assert.match(app.text("theme-title"), /Plats mijotés/);
+  assert.equal(app.$("theme-list").children.length, 1);
+  await app.click(app.all("#theme-list .open")[0]);
+  assert.equal(app.text("r-title"), "Soupe de potiron");
+  await app.click("back");
+  assert.equal(app.visible("view-theme"), true);
+  await app.click("theme-back");
+  assert.equal(app.visible("view-themes"), true);
+});
+
+test("thèmes : les recettes sans thématique vont dans « Non classées »", async () => {
+  const bare = { ...SOUPE, themes: [] };
+  const app = await boot({ storage: withSaved([savedItem(bare)]) });
+  await app.click("tab-themes");
+  const tiles = app.all("#theme-grid .tile");
+  assert.equal(tiles.length, 1);
+  assert.match(tiles[0].textContent, /Non classées/);
+  assert.equal(app.visible("themes-empty"), false);
+});
+
+test("thèmes : sans recette, un message invite à en enregistrer", async () => {
+  const app = await boot();
+  await app.click("tab-themes");
+  assert.equal(app.visible("themes-empty"), true);
+});
+
+test("thèmes : on classe une fiche à la main (puce connue, thématique perso, maximum 3)", async () => {
+  const bare = { ...SOUPE, themes: [] };
+  const app = await boot({ storage: withSaved([savedItem(bare)]) });
+  await app.click(app.all("#saved-list .open")[0]);
+  await openEditor(app);
+  const chipFor = (key: string) => app.$("e-themes").querySelector(`[data-theme="${key}"]`);
+  await app.click(chipFor("asie"));
+  assert.equal(chipFor("asie").getAttribute("aria-pressed"), "true");
+  await app.type("e-theme-new", "Repas de Noël");
+  await app.click("e-theme-add");
+  await app.click(chipFor("rapide"));
+  await app.click(chipFor("france")); // 4e : refusée
+  assert.match(app.text("e-theme-hint"), /3 thématiques au maximum/);
+  assert.equal(chipFor("france").getAttribute("aria-pressed"), "false");
+  await app.type("e-emoji", "🥟");
+  await app.click(app.$("recipe-edit").querySelector("[type=submit]"));
+  assert.deepEqual(app.saved()[0].recipe.themes, ["asie", "Repas de Noël", "rapide"]);
+  assert.equal(app.saved()[0].recipe.emoji, "🥟");
+  assert.match(app.text("r-themes"), /Repas de Noël/);
+
+  await app.click("back");
+  await app.click("tab-themes");
+  const labels = app.all("#theme-grid .tile strong").map((t: any) => t.textContent);
+  assert.deepEqual(labels, ["Saveurs d'Asie", "Plat rapide du soir", "Repas de Noël"]);
+});
+
+test("thèmes : un emoji invalide dans la fiche est refusé", async () => {
+  const app = await boot({ storage: withSaved([savedItem(RECIPE)]) });
+  await app.click(app.all("#saved-list .open")[0]);
+  await openEditor(app);
+  await app.type("e-emoji", "pizza");
+  await app.click(app.$("recipe-edit").querySelector("[type=submit]"));
+  assert.equal(app.visible("e-error"), true);
+  assert.match(app.text("e-error"), /emoji/);
 });
 
 test("courses : liste groupée de plusieurs recettes, quantités additionnées selon les portions", async () => {
   const app = await boot({ storage: two() });
-  await app.click("tab-saved");
+  await app.click("tab-shopping");
   assert.equal(app.$("make-list").disabled, true);
 
-  for (const cb of app.all("#saved-list .sel")) await app.click(cb);
+  for (const cb of app.all("#shop-recipes .sel")) await app.click(cb);
   assert.equal(app.text("make-list"), "Liste de courses (2)");
   await app.click("make-list");
 
@@ -639,15 +723,20 @@ test("courses : liste groupée de plusieurs recettes, quantités additionnées s
   assert.ok(app.clipboard[0].includes("350 g farine"));
 
   await app.click("shopping-back");
-  assert.equal(app.visible("view-saved"), true);
+  assert.equal(app.visible("shop-pick"), true);
+  assert.equal(app.visible("shop-result"), false);
 });
 
 test("courses : une fiche supprimée disparaît de la sélection", async () => {
   const app = await boot({ storage: two() });
-  await app.click("tab-saved");
-  await app.click(app.all("#saved-list .sel")[0]);
+  await app.click("tab-shopping");
+  await app.click(app.all("#shop-recipes .sel")[0]);
   assert.equal(app.text("make-list"), "Liste de courses (1)");
-  await app.click(app.all("#saved-list .del")[0]);
+  await app.click("tab-home");
+  await app.click(app.all("#saved-list .open")[0]); // la plus récente : la même fiche
+  await app.click("delete");
+  await app.click("tab-shopping");
+  assert.equal(app.$("shop-recipes").children.length, 1);
   assert.equal(app.$("make-list").disabled, true);
 });
 
@@ -662,7 +751,7 @@ const readBlob = (w: any, blob: Blob) =>
 
 test("sauvegarde : l'export contient toutes les fiches et date la dernière sauvegarde", async () => {
   const app = await boot({ storage: two() });
-  await app.click("tab-saved");
+  await app.click("tab-more");
   assert.match(app.text("last-export"), /jamais exporté/);
 
   await app.click("export");
@@ -676,7 +765,7 @@ test("sauvegarde : l'export contient toutes les fiches et date la dernière sauv
 
 test("sauvegarde : rien à exporter sur un appareil vide", async () => {
   const app = await boot();
-  await app.click("tab-saved");
+  await app.click("tab-more");
   await app.click("export");
   assert.equal(app.downloads.length, 0);
   assert.match(app.text("toast"), /Aucune recette à exporter/);
@@ -691,15 +780,16 @@ async function importFile(app: Awaited<ReturnType<typeof boot>>, content: string
 
 test("sauvegarde : un export se réimporte sur un autre appareil, sans doublon au second import", async () => {
   const source = await boot({ storage: two() });
-  await source.click("tab-saved");
+  await source.click("tab-more");
   await source.click("export");
   const file = await readBlob(source.w, source.downloads[0].blob);
 
   const other = await boot();
-  await other.click("tab-saved");
+  await other.click("tab-more");
   await importFile(other, file);
   assert.equal(other.saved().length, 2);
   assert.match(other.text("toast"), /2 ajoutées/);
+  await other.click("tab-home");
   assert.equal(other.$("saved-list").children.length, 2);
   assert.equal(other.saved().find((r: any) => r.videoId === ID).recipe.title, "Pâte à crêpes");
 
@@ -710,7 +800,7 @@ test("sauvegarde : un export se réimporte sur un autre appareil, sans doublon a
 
 test("sauvegarde : un fichier invalide est refusé sans toucher aux recettes", async () => {
   const app = await boot({ storage: two() });
-  await app.click("tab-saved");
+  await app.click("tab-more");
   await importFile(app, "ceci n'est pas du json");
   assert.match(app.text("toast"), /illisible/);
   await importFile(app, '{"autre": true}');
@@ -720,7 +810,7 @@ test("sauvegarde : un fichier invalide est refusé sans toucher aux recettes", a
 
 test("sauvegarde : un fichier piégé ne peut pas injecter de code dans la page", async () => {
   const app = await boot();
-  await app.click("tab-saved");
+  await app.click("tab-more");
   const evil = {
     recipes: [
       {
@@ -735,6 +825,7 @@ test("sauvegarde : un fichier piégé ne peut pas injecter de code dans la page"
     ],
   };
   await importFile(app, JSON.stringify(evil));
+  await app.click("tab-home");
   await app.click(app.all("#saved-list .open")[0]);
   await app.click("cook-start");
   assert.equal(app.w.__pwned, undefined);
@@ -745,17 +836,30 @@ test("sauvegarde : un fichier piégé ne peut pas injecter de code dans la page"
 
 /* ======================= Navigation ======================= */
 
-test("navigation : « Retour » revient à la vue d'où l'on vient", async () => {
+test("navigation : « Retour » revient à l'écran d'où l'on vient, la barre du bas se masque sur la fiche", async () => {
   const app = await boot({ storage: two() });
-  await app.click("tab-saved");
   await app.click(app.all("#saved-list .open")[0]);
   assert.equal(app.visible("recipe"), true);
+  assert.equal(app.$("bottom-nav").hidden, true);
   await app.click("back");
-  assert.equal(app.visible("view-saved"), true);
-  assert.equal(app.$("tab-saved").classList.contains("active"), true);
+  assert.equal(app.visible("view-home"), true);
+  assert.equal(app.$("bottom-nav").hidden, false);
+  assert.equal(app.$("tab-home").getAttribute("aria-current"), "page");
 
-  await app.click("tab-new");
+  await app.click("tab-more");
+  assert.equal(app.$("tab-more").getAttribute("aria-current"), "page");
+  assert.equal(app.$("tab-home").hasAttribute("aria-current"), false);
+
+  await app.click("tab-home");
   await app.extract(`https://youtu.be/${ID2}`);
   await app.click("back");
-  assert.equal(app.visible("view-new"), true);
+  assert.equal(app.visible("view-home"), true);
+});
+
+test("réglages : oublier le code d'accès", async () => {
+  const app = await boot({ storage: { "cookclip.access.v1": JSON.stringify("secret") } });
+  await app.click("tab-more");
+  await app.click("forget-code");
+  assert.match(app.text("toast"), /Code oublié/);
+  assert.ok(!app.w.localStorage.getItem("cookclip.access.v1") || !/secret/.test(app.w.localStorage.getItem("cookclip.access.v1")));
 });

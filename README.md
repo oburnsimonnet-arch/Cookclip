@@ -11,7 +11,9 @@ PWA installable sur Android + une route serverless (`/api/recipe`) qui confie la
 - **Portions** ajustables, ingrédients à cocher, liste de courses copiable.
 - **Modifier** : corrige titre, catégorie, portions, ingrédients et étapes à la main (ajout, suppression, fractions `1/2` acceptées). Une fiche déjà enregistrée est mise à jour automatiquement.
 - **Mode cuisine** : une étape à la fois en grand, glisser pour changer d'étape, **minuteurs** pour les étapes qui ont une durée (son + vibration à la fin, plusieurs minuteurs possibles), écran maintenu allumé.
-- **Rangement** : catégorie et mots-clés proposés par Gemini, recherche (titre, ingrédient, mot-clé — sans tenir compte des accents), filtre par catégorie.
+- **Thématiques** : Gemini range chaque recette dans 1 ou 2 thématiques d'une liste fixe (cuisine française, italienne, réunionnaise, Asie, Orient et Maghreb, Amériques, plat rapide, léger, végétarien, fêtes et apéro, douceurs, plats mijotés, incontournables du monde). Onglet **Thèmes** (tuiles + liste), filtre par thématique sur l'accueil, recettes sans thématique dans « Non classées ». Dans **Modifier**, on change les thématiques (3 au plus) et on crée les siennes (« Repas de Noël »).
+- **Rangement** : catégorie et mots-clés proposés par Gemini, recherche (titre, ingrédient, mot-clé, thématique — sans tenir compte des accents).
+- **Visuel** : inspiré du projet « Saveurs » (cartes arrondies, titres en Fraunces, texte en Plus Jakarta Sans, navigation en bas, mode sombre). Pas de photos : chaque carte a la couleur de sa thématique et l'emoji du plat.
 - **Liste de courses groupée** : coche plusieurs recettes enregistrées ; les ingrédients identiques sont additionnés selon les portions (`500 g` + `25 cl`… `œufs` / `oeuf`, `g` / `kg`, `ml` / `cl` / `l`).
 - **Lien de la vidéo** conservé sur chaque fiche.
 - **Sauvegarde** : export de toutes les recettes dans un fichier, import sans doublon.
@@ -81,6 +83,8 @@ npx vercel dev               # lance le site et l'API en local
 - **Catégorie et mots-clés** sont proposés par Gemini et peuvent être faux (« végétarien » en particulier) : corrige-les avec **Modifier**.
 - **Écran allumé** : dépend du navigateur ; si l'appareil ne le permet pas, le mode cuisine prévient et fonctionne quand même.
 - **Une seule langue d'interface** (français).
+- **Recettes enregistrées avant les thématiques** : elles vont dans « Non classées » ; ouvre-les et touche **Modifier** pour les classer.
+- **Bouton retour du téléphone** : il quitte l'application au lieu de revenir à l'écran précédent (utilise la flèche de l'application).
 
 ## Structure
 
@@ -89,11 +93,13 @@ api/recipe.ts      route serverless (code d'accès, vidéo ou transcription)
 lib/access.ts      vérification du code d'accès
 lib/youtube.ts     lien → identifiant de vidéo
 lib/extract.ts     prompt + appels à Gemini (vidéo, ou texte en secours)
-lib/recipe.ts      types, catégories, extraction et validation du JSON
+lib/recipe.ts      types, catégories, thématiques, extraction et validation du JSON
 public/index.html  les écrans
 public/app.js      assemblage de l'application
 public/js/         modules : stockage, sauvegarde, liste de courses, minuteur,
-                   mode cuisine, éditeur, validation, formats
+                   mode cuisine, éditeur, validation, formats, thématiques,
+                   icônes, composants d'interface
+public/fonts/      Fraunces et Plus Jakarta Sans (licence SIL OFL, copiées ici)
 tests/             tests de la logique et de l'interface (jsdom)
 ```
 

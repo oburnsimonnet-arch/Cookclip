@@ -1,6 +1,6 @@
 // Service worker minimal : met en cache l'interface (pas l'API) pour un lancement instantané,
 // y compris hors connexion (les recettes enregistrées vivent dans le stockage de l'appareil).
-const CACHE = "cookclip-v2";
+const CACHE = "cookclip-v3";
 const SHELL = [
   "/",
   "/styles.css",
@@ -14,6 +14,16 @@ const SHELL = [
   "/js/timer.js",
   "/js/cook.js",
   "/js/edit.js",
+  "/js/dom.js",
+  "/js/icons.js",
+  "/js/themes.js",
+  "/js/ui.js",
+  "/fonts/fraunces-latin-600-normal.woff2",
+  "/fonts/fraunces-latin-700-normal.woff2",
+  "/fonts/plus-jakarta-sans-latin-400-normal.woff2",
+  "/fonts/plus-jakarta-sans-latin-500-normal.woff2",
+  "/fonts/plus-jakarta-sans-latin-600-normal.woff2",
+  "/fonts/plus-jakarta-sans-latin-700-normal.woff2",
   "/manifest.webmanifest",
   "/icon.svg",
 ];
@@ -37,7 +47,7 @@ self.addEventListener("activate", (e) => {
 
 self.addEventListener("fetch", (e) => {
   const url = new URL(e.request.url);
-  if (e.request.method !== "GET" || url.pathname.startsWith("/api/")) return;
+  if (e.request.method !== "GET" || url.origin !== self.location.origin || url.pathname.startsWith("/api/")) return;
   // Réseau d'abord, cache en secours : les mises à jour arrivent dès qu'on est en ligne.
   e.respondWith(
     fetch(e.request)

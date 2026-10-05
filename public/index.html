@@ -8,150 +8,240 @@
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/icon-192.png">
+  <link rel="preload" href="/fonts/fraunces-latin-700-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/fonts/plus-jakarta-sans-latin-500-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
-  <header class="top">
-    <h1>Cook<span>clip</span></h1>
-    <nav>
-      <button id="tab-new" class="tab active" type="button">Nouvelle</button>
-      <button id="tab-saved" class="tab" type="button">Enregistrées</button>
-    </nav>
-  </header>
+  <div class="app">
 
-  <main>
-    <!-- Saisie -->
-    <section id="view-new">
-      <form id="form" autocomplete="off">
-        <label for="url">Lien de la vidéo YouTube</label>
-        <input id="url" name="url" type="url" inputmode="url" placeholder="https://youtu.be/…" required>
+    <!-- Accueil : extraire une recette, retrouver les siennes -->
+    <section id="view-home" class="view">
+      <header class="page-head">
+        <div>
+          <p class="eyebrow">Ta cuisine, en vidéo</p>
+          <h1 class="display">Cookclip</h1>
+        </div>
+      </header>
 
+      <form id="form" class="card capture" autocomplete="off">
+        <div>
+          <label class="field-label" for="url">Lien de la vidéo YouTube</label>
+          <input id="url" name="url" type="url" inputmode="url" placeholder="https://youtu.be/…" required>
+        </div>
         <label class="check"><input id="french" type="checkbox" checked> Rédiger la recette en français</label>
-
         <details id="manual">
           <summary>Ça ne marche pas ? Colle la transcription à la place</summary>
           <p class="hint">Sur YouTube : « … plus » sous la vidéo, puis « Afficher la transcription ». Copie le texte ici.</p>
           <textarea id="transcript" rows="6" placeholder="Transcription de la vidéo…"></textarea>
         </details>
-
-        <button id="go" class="primary" type="submit">Extraire la recette</button>
+        <button id="go" class="btn btn-primary btn-block" type="submit"><span data-icon="sparkles" data-size="18"></span>Extraire la recette</button>
       </form>
 
-      <form id="access-form" class="access" autocomplete="off" hidden>
-        <label for="access-code">Code d'accès</label>
+      <form id="access-form" class="card access" autocomplete="off" hidden>
+        <label class="field-label" for="access-code">Code d'accès</label>
         <p class="hint">Ce site est protégé. Saisis le code défini dans Vercel (variable ACCESS_CODE).</p>
         <input id="access-code" type="password" autocomplete="current-password" required>
-        <button class="primary" type="submit">Valider</button>
+        <button class="btn btn-primary" type="submit">Valider</button>
       </form>
 
       <p id="status" class="status" role="status" aria-live="polite" hidden></p>
+
+      <h2 class="section-title">Mes recettes</h2>
+      <div id="saved-tools">
+        <div class="search">
+          <span class="icon" data-icon="search" data-size="18"></span>
+          <input id="search" type="search" placeholder="Titre, ingrédient, mot-clé…" aria-label="Rechercher une recette">
+        </div>
+        <div id="theme-chips" class="chips" role="group" aria-label="Filtrer par thématique"></div>
+      </div>
+      <div id="saved-empty" class="empty" hidden>
+        <span class="big" aria-hidden="true">🍳</span>
+        <strong>Aucune recette enregistrée</strong>
+        <p>Colle un lien YouTube ci-dessus, puis enregistre la fiche.</p>
+      </div>
+      <p id="saved-none" class="empty" hidden>Aucune recette ne correspond.</p>
+      <ul id="saved-list" class="rows" style="margin-top:14px"></ul>
+    </section>
+
+    <!-- Thématiques -->
+    <section id="view-themes" class="view" hidden>
+      <header class="page-head">
+        <div>
+          <p class="eyebrow">Explorer</p>
+          <h1 class="display">Thématiques</h1>
+          <p class="lead">Tes recettes rangées par cuisine et par style.</p>
+        </div>
+      </header>
+      <div id="theme-grid" class="tile-grid"></div>
+      <div id="themes-empty" class="empty" hidden>
+        <span class="big" aria-hidden="true">🧭</span>
+        <strong>Rien à explorer pour l'instant</strong>
+        <p>Enregistre une recette : elle sera classée automatiquement.</p>
+      </div>
+    </section>
+
+    <section id="view-theme" class="view" hidden>
+      <header class="page-head">
+        <div>
+          <button id="theme-back" class="btn btn-soft" type="button"><span data-icon="arrow-left" data-size="18"></span>Thématiques</button>
+          <h1 id="theme-title" class="display" style="margin-top:16px"></h1>
+          <p id="theme-count" class="lead"></p>
+        </div>
+      </header>
+      <ul id="theme-list" class="rows"></ul>
+    </section>
+
+    <!-- Courses -->
+    <section id="view-shopping" class="view" hidden>
+      <div id="shop-pick">
+        <header class="page-head">
+          <div>
+            <p class="eyebrow">Au marché</p>
+            <h1 class="display">Courses</h1>
+            <p class="lead">Coche des recettes : les ingrédients sont regroupés et additionnés.</p>
+          </div>
+        </header>
+        <div id="shop-recipes" class="check-list"></div>
+        <p id="shop-empty" class="empty" hidden>Enregistre d'abord des recettes pour préparer une liste.</p>
+        <div class="sticky-action">
+          <button id="make-list" class="btn btn-primary btn-block" type="button" disabled>Liste de courses</button>
+        </div>
+      </div>
+      <div id="shop-result" hidden>
+        <header class="page-head">
+          <div>
+            <button id="shopping-back" class="btn btn-soft" type="button"><span data-icon="arrow-left" data-size="18"></span>Recettes</button>
+            <h1 class="display" style="margin-top:16px">Ma liste</h1>
+            <p id="shopping-from" class="lead"></p>
+          </div>
+        </header>
+        <ul id="shopping-list" class="check-list"></ul>
+        <div class="actions">
+          <button id="shopping-copy" class="btn btn-primary btn-block" type="button"><span data-icon="copy" data-size="18"></span>Copier la liste</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Réglages -->
+    <section id="view-more" class="view" hidden>
+      <header class="page-head">
+        <div>
+          <p class="eyebrow">Sur cet appareil</p>
+          <h1 class="display">Réglages</h1>
+        </div>
+      </header>
+      <div class="settings">
+        <div class="card">
+          <h3>Sauvegarde</h3>
+          <p class="hint">Tes recettes sont stockées sur cet appareil seulement : effacer les données du navigateur ou changer de téléphone les supprime. Exporte-les de temps en temps.</p>
+          <p id="last-export" class="hint" style="margin-top:8px"></p>
+          <div class="row">
+            <button id="export" class="btn" type="button"><span data-icon="download" data-size="18"></span>Exporter</button>
+            <button id="import" class="btn" type="button"><span data-icon="upload" data-size="18"></span>Importer</button>
+            <input id="import-file" type="file" accept="application/json,.json" hidden>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Code d'accès</h3>
+          <p class="hint">Le code est retenu sur cet appareil pour les prochaines extractions.</p>
+          <div class="row"><button id="forget-code" class="btn" type="button"><span data-icon="lock" data-size="18"></span>Oublier le code</button></div>
+        </div>
+        <div class="card">
+          <h3>À propos</h3>
+          <p class="hint">Cookclip lit la vidéo avec Gemini et en tire une fiche. Chaque extraction consomme du quota gratuit : une vidéo déjà lue n'est jamais relue.</p>
+        </div>
+      </div>
     </section>
 
     <!-- Fiche recette -->
-    <article id="recipe" hidden>
-      <button id="back" class="link" type="button">← Retour</button>
-
+    <article id="recipe" class="view" hidden>
       <div id="recipe-read">
-        <h2 id="r-title"></h2>
-        <p id="r-meta" class="meta"></p>
-        <p id="r-tags" class="tags" hidden></p>
+        <div id="r-hero" class="detail-hero">
+          <button id="back" class="round-btn on-photo back" type="button" aria-label="Retour"><span data-icon="arrow-left" data-size="22"></span></button>
+          <span id="r-emoji" aria-hidden="true"></span>
+        </div>
+        <div class="card title-card">
+          <h2 id="r-title"></h2>
+          <div id="r-themes" class="chip-wrap" hidden></div>
+          <p id="r-tags" class="chip-wrap hint" style="margin-top:8px" hidden></p>
+          <div id="r-stats" class="stats"></div>
+        </div>
 
-        <div class="servings">
+        <div class="card servings">
           <span>Portions</span>
-          <button id="minus" type="button" aria-label="Moins de portions">−</button>
-          <strong id="servings-value">4</strong>
-          <button id="plus" type="button" aria-label="Plus de portions">+</button>
+          <span class="stepper">
+            <button id="minus" class="round-btn" type="button" aria-label="Moins de portions"><span data-icon="minus" data-size="20"></span></button>
+            <strong id="servings-value">4</strong>
+            <button id="plus" class="round-btn" type="button" aria-label="Plus de portions"><span data-icon="plus" data-size="20"></span></button>
+          </span>
         </div>
 
         <div id="r-warnings" class="warnings" hidden></div>
 
-        <h3>Ingrédients</h3>
-        <ul id="r-ingredients" class="ingredients"></ul>
+        <h3 class="section-title">Ingrédients</h3>
+        <ul id="r-ingredients" class="check-list"></ul>
 
-        <h3>Préparation</h3>
-        <ol id="r-steps" class="steps"></ol>
+        <h3 class="section-title">Préparation</h3>
+        <ol id="r-steps" class="step-list"></ol>
 
-        <div id="r-tips-wrap" hidden>
+        <div id="r-tips-wrap" class="tip-card" hidden>
           <h3>Astuces</h3>
           <ul id="r-tips"></ul>
         </div>
 
         <p id="r-source" class="source" hidden>
-          Vidéo d'origine :
-          <a id="r-source-link" href="#" target="_blank" rel="noopener noreferrer">ouvrir sur YouTube ↗</a>
+          <span class="hint">Vidéo d'origine</span>
+          <a id="r-source-link" class="btn btn-soft" href="#" target="_blank" rel="noopener noreferrer">Ouvrir sur YouTube<span data-icon="external" data-size="16"></span></a>
         </p>
 
         <div class="actions">
-          <button id="cook-start" class="primary" type="button">Mode cuisine</button>
-          <button id="save" class="accent" type="button">Enregistrer</button>
-          <button id="edit" type="button">Modifier</button>
-          <button id="copy-list" type="button">Copier la liste de courses</button>
-          <button id="share" type="button" hidden>Partager</button>
-          <button id="refresh" type="button" hidden>Réextraire (nouvel appel)</button>
+          <button id="cook-start" class="btn btn-primary btn-block" type="button"><span data-icon="chef-hat" data-size="20"></span>Mode cuisine</button>
+          <div class="row">
+            <button id="save" class="btn" type="button"><span data-icon="bookmark" data-size="18"></span>Enregistrer</button>
+            <button id="edit" class="btn" type="button"><span data-icon="pencil" data-size="18"></span>Modifier</button>
+          </div>
+          <div class="row">
+            <button id="copy-list" class="btn" type="button"><span data-icon="copy" data-size="18"></span>Copier la liste</button>
+            <button id="share" class="btn" type="button" hidden><span data-icon="share" data-size="18"></span>Partager</button>
+          </div>
+          <button id="refresh" class="btn btn-soft" type="button" hidden><span data-icon="refresh" data-size="18"></span>Réextraire (nouvel appel)</button>
+          <button id="delete" class="btn btn-danger" type="button" hidden><span data-icon="trash" data-size="18"></span>Supprimer cette recette</button>
         </div>
       </div>
 
       <form id="recipe-edit" class="edit" hidden></form>
     </article>
+  </div>
 
-    <!-- Recettes enregistrées -->
-    <section id="view-saved" hidden>
-      <div class="toolbar">
-        <input id="search" type="search" placeholder="Rechercher (titre, ingrédient, mot-clé)…" aria-label="Rechercher une recette">
-        <div id="cat-filters" class="chips" role="group" aria-label="Filtrer par catégorie"></div>
-      </div>
-
-      <p id="saved-empty" class="hint">Aucune recette enregistrée pour l'instant.</p>
-      <p id="saved-none" class="hint" hidden>Aucune recette ne correspond à cette recherche.</p>
-      <ul id="saved-list" class="saved"></ul>
-
-      <div class="actions saved-actions">
-        <button id="make-list" class="primary" type="button" disabled>Liste de courses</button>
-      </div>
-
-      <div class="backup">
-        <h3>Sauvegarde</h3>
-        <p class="hint">Tes recettes sont stockées sur cet appareil seulement : effacer les données du navigateur ou changer de téléphone les supprime. Exporte-les de temps en temps.</p>
-        <p id="last-export" class="hint"></p>
-        <div class="actions">
-          <button id="export" type="button">Exporter mes recettes</button>
-          <button id="import" type="button">Importer un fichier</button>
-          <input id="import-file" type="file" accept="application/json,.json" hidden>
-        </div>
-      </div>
-    </section>
-
-    <!-- Liste de courses groupée -->
-    <section id="view-shopping" hidden>
-      <button id="shopping-back" class="link" type="button">← Retour aux recettes</button>
-      <h2>Liste de courses</h2>
-      <p id="shopping-from" class="meta"></p>
-      <ul id="shopping-list" class="ingredients"></ul>
-      <div class="actions">
-        <button id="shopping-copy" class="primary" type="button">Copier la liste</button>
-      </div>
-    </section>
-  </main>
+  <nav id="bottom-nav" class="bottom-nav" aria-label="Navigation principale">
+    <div class="inner">
+      <button id="tab-home" class="tab" type="button"><span data-icon="home" data-size="22"></span>Accueil</button>
+      <button id="tab-themes" class="tab" type="button"><span data-icon="compass" data-size="22"></span>Thèmes</button>
+      <button id="tab-shopping" class="tab" type="button"><span data-icon="cart" data-size="22"></span>Courses</button>
+      <button id="tab-more" class="tab" type="button"><span data-icon="sliders" data-size="22"></span>Réglages</button>
+    </div>
+  </nav>
 
   <!-- Mode cuisine -->
   <div id="cook" class="cook" role="dialog" aria-modal="true" aria-label="Mode cuisine" hidden>
     <header class="cook-top">
       <strong id="cook-title"></strong>
-      <button id="cook-quit" type="button">Quitter</button>
+      <button id="cook-quit" class="btn" type="button">Quitter</button>
     </header>
     <button id="cook-alert" class="cook-alert" type="button" role="alert" hidden></button>
     <div id="cook-body" class="cook-body"></div>
     <div id="cook-timer" class="cook-timer" hidden>
       <span id="cook-clock" class="clock" aria-live="off">00:00</span>
-      <button id="cook-timer-toggle" class="primary" type="button">Démarrer</button>
-      <button id="cook-timer-reset" type="button">Remettre à zéro</button>
+      <button id="cook-timer-toggle" class="btn btn-primary" type="button">Démarrer</button>
+      <button id="cook-timer-reset" class="btn" type="button">Remettre à zéro</button>
     </div>
     <p id="cook-others" class="cook-note"></p>
     <p id="cook-wake" class="cook-note"></p>
     <footer class="cook-nav">
-      <button id="cook-prev" type="button">Précédent</button>
+      <button id="cook-prev" class="btn" type="button">Précédent</button>
       <span id="cook-progress"></span>
-      <button id="cook-next" class="primary" type="button">Suivant</button>
+      <button id="cook-next" class="btn btn-primary" type="button">Suivant</button>
     </footer>
   </div>
 

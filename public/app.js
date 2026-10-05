@@ -1,7 +1,7 @@
 import { legacyIdFor, savedIdFor, videoIdFrom, videoUrl } from "./js/ids.js";
 import { formatQty } from "./js/format.js";
 import { cacheKey, createStore } from "./js/store.js";
-import { CATEGORIES, sanitizeRecipe } from "./js/sanitize.js";
+import { sanitizeRecipe } from "./js/sanitize.js";
 import {
   buildExport,
   exportFileName,
@@ -12,8 +12,13 @@ import {
 import { buildShoppingList, nameKey, shoppingLine } from "./js/shopping.js";
 import { initCook } from "./js/cook.js";
 import { createEditor } from "./js/edit.js";
+import { h } from "./js/dom.js";
+import { hydrateIcons, icon } from "./js/icons.js";
+import { NO_THEME, matchesTheme, primaryTheme, recipeEmoji, recipeThemes, themeCounts, themeInfo } from "./js/themes.js";
+import { chip, emptyState, formatDuration, recipeRow, thumb, themeTile } from "./js/ui.js";
 
 const $ = (id) => document.getElementById(id);
+hydrateIcons();
 
 function getStorage() {
   try {
@@ -33,10 +38,11 @@ const store = createStore(getStorage());
 
 /* ---------- État ---------- */
 let current = null; // fiche affichée : { recipe, baseServings, servings, videoId, cacheKey, savedId }
-let previousView = "new"; // vue à retrouver avec « Retour »
+let previousScreen = "home"; // écran à retrouver avec « Retour »
 let pending = null; // demande refusée faute de code d'accès, rejouée une fois le code saisi
 let lastShopping = [];
-const savedFilter = { q: "", cat: "" };
+let openedTheme = ""; // thématique affichée dans l'écran « theme »
+const homeFilter = { q: "", theme: "" };
 const selected = new Set(); // identifiants des fiches cochées pour la liste de courses
 
 /* ---------- Petits utilitaires ---------- */
@@ -55,39 +61,46 @@ function setStatus(msg, isError = false) {
   s.classList.toggle("error", isError);
 }
 
-function el(tag, className, text) {
-  const e = document.createElement(tag);
-  if (className) e.className = className;
-  if (text !== undefined) e.textContent = text;
-  return e;
+/* ---------- Écrans ---------- */
+const SCREENS = {
+  home: { id: "view-home", tab: "tab-home" },
+  themes: { id: "view-themes", tab: "tab-themes" },
+  theme: { id: "view-theme", tab: "tab-themes" },
+  shopping: { id: "view-shopping", tab: "tab-shopping" },
+  more: { id: "view-more", tab: "tab-more" },
+  recipe: { id: "recipe", tab: null },
+};
+
+function visibleScreen() {
+  return Object.keys(SCREENS).find((name) => !$(SCREENS[name].id).hidden) || "home";
 }
 
-/* ---------- Vues ---------- */
-const VIEW_IDS = { new: "view-new", recipe: "recipe", saved: "view-saved", shopping: "view-shopping" };
-
-function visibleView() {
-  return Object.keys(VIEW_IDS).find((name) => !$(VIEW_IDS[name]).hidden) || "new";
-}
-
-function showView(name) {
-  for (const [key, id] of Object.entries(VIEW_IDS)) $(id).hidden = key !== name;
-  if (name !== "recipe") {
-    const tab = name === "new" ? "new" : "saved";
-    $("tab-new").classList.toggle("active", tab === "new");
-    $("tab-saved").classList.toggle("active", tab === "saved");
+function showScreen(name) {
+  for (const [key, s] of Object.entries(SCREENS)) $(s.id).hidden = key !== name;
+  for (const id of ["tab-home", "tab-themes", "tab-shopping", "tab-more"]) {
+    const on = SCREENS[name].tab === id;
+    if (on) $(id).setAttribute("aria-current", "page");
+    else $(id).removeAttribute("aria-current");
   }
+  $("bottom-nav").hidden = name === "recipe";
   window.scrollTo({ top: 0 });
 }
 
-$("tab-new").addEventListener("click", () => showView("new"));
-$("tab-saved").addEventListener("click", () => {
-  renderSaved();
-  showView("saved");
-});
-$("back").addEventListener("click", () => {
-  if (previousView === "saved") renderSaved();
-  showView(previousView);
-});
+/** Affiche un écran en recalculant son contenu. */
+function goto(name) {
+  if (name === "home") renderHome();
+  else if (name === "themes") renderThemes();
+  else if (name === "theme") renderTheme();
+  else if (name === "shopping") renderShopPick();
+  else if (name === "more") renderMore();
+  showScreen(name);
+}
+
+$("tab-home").addEventListener("click", () => goto("home"));
+$("tab-themes").addEventListener("click", () => goto("themes"));
+$("tab-shopping").addEventListener("click", () => goto("shopping"));
+$("tab-more").addEventListener("click", () => goto("more"));
+$("back").addEventListener("click", () => goto(previousScreen));
 
 /* ---------- Affichage d'une fiche ---------- */
 function scaledQty(ing) {
@@ -105,17 +118,26 @@ function ingredientLabel(ing) {
 
 function renderRecipe() {
   const { recipe } = current;
+  const theme = primaryTheme(recipe);
+  $("r-hero").style.background = theme.gradient;
+  $("r-emoji").textContent = recipeEmoji(recipe);
   $("r-title").textContent = recipe.title;
 
-  const meta = [];
-  if (recipe.prepTimeMin) meta.push(`Préparation ${recipe.prepTimeMin} min`);
-  if (recipe.cookTimeMin) meta.push(`Cuisson ${recipe.cookTimeMin} min`);
-  $("r-meta").textContent = meta.join(" · ");
+  const themeBox = $("r-themes");
+  themeBox.replaceChildren(...recipeThemes(recipe).map((t) => h("span", { class: "chip static", text: themeInfo(t).emoji + " " + themeInfo(t).label })));
+  themeBox.hidden = !themeBox.children.length;
 
   const tagBox = $("r-tags");
-  tagBox.replaceChildren();
-  [recipe.category, ...(recipe.tags || [])].filter(Boolean).forEach((t) => tagBox.append(el("span", "chip static", t)));
+  tagBox.replaceChildren(...[recipe.category, ...(recipe.tags || [])].filter(Boolean).map((t) => h("span", { class: "chip static", text: t })));
   tagBox.hidden = !tagBox.children.length;
+
+  const stat = (iconName, value, label) =>
+    h("div", { class: "stat" }, icon(iconName, 18), h("b", { text: value }), h("small", { text: label }));
+  const stats = [];
+  if (recipe.prepTimeMin) stats.push(stat("clock", formatDuration(recipe.prepTimeMin), "Préparation"));
+  if (recipe.cookTimeMin) stats.push(stat("flame", formatDuration(recipe.cookTimeMin), "Cuisson"));
+  stats.push(stat("users", String(current.servings), current.servings > 1 ? "Portions" : "Portion"));
+  $("r-stats").replaceChildren(...stats);
 
   $("servings-value").textContent = current.servings;
 
@@ -123,44 +145,34 @@ function renderRecipe() {
   warnBox.replaceChildren();
   warnBox.hidden = !recipe.warnings.length;
   if (recipe.warnings.length) {
-    const ul = el("ul");
-    recipe.warnings.forEach((w) => ul.append(el("li", "", w)));
-    warnBox.append(el("strong", "", "À vérifier"), ul);
+    warnBox.append(h("strong", { text: "À vérifier" }), h("ul", {}, recipe.warnings.map((w) => h("li", { text: w }))));
   }
 
-  const ul = $("r-ingredients");
-  ul.replaceChildren();
-  recipe.ingredients.forEach((ing, i) => {
-    const li = el("li");
-    const cb = el("input");
-    cb.type = "checkbox";
-    cb.id = "ing-" + i;
-    cb.addEventListener("change", () => li.classList.toggle("done", cb.checked));
+  $("r-ingredients").replaceChildren(
+    ...recipe.ingredients.map((ing, i) => {
+      const { qty, name } = ingredientLabel(ing);
+      const cb = h("input", { type: "checkbox", id: "ing-" + i });
+      const row = h("li", { class: "check-row" });
+      cb.addEventListener("change", () => row.classList.toggle("done", cb.checked));
+      const label = h("label", { for: cb.id }, qty ? h("span", { class: "qty", text: qty + " " }) : "", name);
+      if (ing.note || ing.uncertain) label.append(h("span", { class: "approx", text: " — " + (ing.note || "quantité non précisée") }));
+      row.append(cb, label);
+      return row;
+    }),
+  );
 
-    const label = el("label", "plain");
-    label.htmlFor = cb.id;
-    const { qty, name } = ingredientLabel(ing);
-    if (qty) label.append(el("span", "qty", qty + " "));
-    label.append(document.createTextNode(name));
-    if (ing.note || ing.uncertain) {
-      label.append(el("span", "approx", " — " + (ing.note || "quantité non précisée")));
-    }
-    li.append(cb, label);
-    ul.append(li);
-  });
-
-  const ol = $("r-steps");
-  ol.replaceChildren();
-  recipe.steps.forEach((s) => {
-    const li = el("li", "", s.text);
-    if (s.durationMin) li.append(el("span", "dur", ` (${s.durationMin} min)`));
-    ol.append(li);
-  });
+  $("r-steps").replaceChildren(
+    ...recipe.steps.map((s) =>
+      h(
+        "li",
+        { class: "step-card" },
+        h("div", {}, h("p", { text: s.text }), s.durationMin ? h("span", { class: "dur" }, icon("clock", 14), `${s.durationMin} min`) : ""),
+      ),
+    ),
+  );
 
   $("r-tips-wrap").hidden = !recipe.tips.length;
-  const tips = $("r-tips");
-  tips.replaceChildren();
-  recipe.tips.forEach((t) => tips.append(el("li", "", t)));
+  $("r-tips").replaceChildren(...recipe.tips.map((t) => h("li", { text: t })));
 
   const sourceUrl = videoUrl(current.videoId);
   $("r-source").hidden = !sourceUrl;
@@ -169,6 +181,7 @@ function renderRecipe() {
   $("share").hidden = !navigator.share;
   $("refresh").hidden = !current.videoId;
   $("cook-start").hidden = !recipe.steps.length;
+  $("delete").hidden = !current.savedId;
 }
 
 function savedIdForVideo(videoId) {
@@ -179,8 +192,8 @@ function savedIdForVideo(videoId) {
 
 function showRecipe(recipe, { servings = null, videoId = null, cacheKey: key = null, savedId = null } = {}) {
   const base = recipe.servings || 4;
-  const view = visibleView();
-  if (view !== "recipe") previousView = view === "shopping" ? "saved" : view;
+  const screen = visibleScreen();
+  if (screen !== "recipe") previousScreen = screen;
   current = {
     recipe,
     baseServings: base,
@@ -192,7 +205,7 @@ function showRecipe(recipe, { servings = null, videoId = null, cacheKey: key = n
   $("recipe-read").hidden = false;
   $("recipe-edit").hidden = true;
   renderRecipe();
-  showView("recipe");
+  showScreen("recipe");
 }
 
 $("minus").addEventListener("click", () => {
@@ -291,7 +304,7 @@ $("access-form").addEventListener("submit", (e) => {
 // Nouvel appel à Gemini pour cette vidéo (si la recette extraite est fausse ou incomplète)
 $("refresh").addEventListener("click", () => {
   if (!current || !current.videoId) return;
-  showView("new");
+  goto("home");
   $("url").value = videoUrl(current.videoId);
   extract({ url: $("url").value }, { force: true });
 });
@@ -340,7 +353,18 @@ $("share").addEventListener("click", async () => {
 function persist(list, message) {
   if (store.storeSaved(list)) toast(message);
   else toast("Stockage plein : exporte tes recettes puis supprime-en.");
+  if (current) $("delete").hidden = !current.savedId;
 }
+
+$("delete").addEventListener("click", () => {
+  if (!current || !current.savedId) return;
+  if (!window.confirm(`Supprimer « ${current.recipe.title} » ?`)) return;
+  selected.delete(current.savedId);
+  store.storeSaved(store.loadSaved().filter((r) => r.id !== current.savedId));
+  current.savedId = null;
+  toast("Recette supprimée");
+  goto(previousScreen === "theme" && !themeCounts(store.loadSaved()).some((c) => c.info.key === openedTheme) ? "themes" : previousScreen);
+});
 
 $("save").addEventListener("click", () => {
   const list = store.loadSaved();
@@ -424,119 +448,117 @@ $("cook-start").addEventListener("click", () => {
   if (!cook.open()) toast("Cette fiche n'a pas d'étapes.");
 });
 
-/* ---------- Recettes enregistrées : liste, recherche, filtre ---------- */
-function matchesFilter(item) {
+/* ---------- Accueil : recherche et filtre par thématique ---------- */
+function matchesSearch(item) {
   const r = item.recipe;
-  if (savedFilter.cat && (r.category || "autre") !== savedFilter.cat) return false;
-  const words = nameKey(savedFilter.q).split(" ").filter(Boolean);
+  const words = nameKey(homeFilter.q).split(" ").filter(Boolean);
   if (!words.length) return true;
   const haystack = nameKey(
-    [r.title, r.category, ...(r.tags || []), ...r.ingredients.map((i) => i.name)].filter(Boolean).join(" "),
+    [r.title, r.category, ...(r.tags || []), ...recipeThemes(r).map((t) => themeInfo(t).label), ...r.ingredients.map((i) => i.name)]
+      .filter(Boolean)
+      .join(" "),
   );
   return words.every((w) => haystack.includes(w));
 }
 
-function renderChips(all) {
-  const box = $("cat-filters");
-  box.replaceChildren();
-  const counts = new Map();
-  all.forEach((item) => {
-    const c = item.recipe.category || "autre";
-    counts.set(c, (counts.get(c) || 0) + 1);
-  });
-  if (savedFilter.cat && !counts.has(savedFilter.cat)) savedFilter.cat = "";
-  if (counts.size < 2) return; // inutile de filtrer quand tout est dans la même catégorie
+const openItem = (item) => showRecipe(item.recipe, { servings: item.servings, videoId: item.videoId || null, savedId: item.id });
 
-  const make = (label, value, count) => {
-    const b = el("button", "chip", `${label} (${count})`);
-    b.type = "button";
-    b.setAttribute("aria-pressed", String(savedFilter.cat === value));
-    b.addEventListener("click", () => {
-      savedFilter.cat = value;
-      renderSaved();
-    });
-    box.append(b);
-  };
-  make("Toutes", "", all.length);
-  CATEGORIES.filter((c) => counts.has(c)).forEach((c) => make(c, c, counts.get(c)));
-}
-
-function renderSaved() {
+function renderHome() {
   const all = store.loadSaved();
   $("saved-empty").hidden = all.length > 0;
-  document.querySelector(".toolbar").hidden = all.length === 0;
-  renderChips(all);
+  $("saved-tools").hidden = all.length === 0;
 
-  const shown = all.filter(matchesFilter);
+  const counts = themeCounts(all);
+  if (homeFilter.theme && !counts.some((c) => c.info.key === homeFilter.theme)) homeFilter.theme = "";
+  const box = $("theme-chips");
+  box.replaceChildren();
+  box.hidden = counts.length < 2; // inutile de filtrer quand tout est dans la même thématique
+  if (counts.length >= 2) {
+    const pick = (key) => () => {
+      homeFilter.theme = key;
+      renderHome();
+    };
+    box.append(chip("Toutes", !homeFilter.theme, pick(""), all.length));
+    counts.forEach(({ info, count }) => box.append(chip(`${info.emoji} ${info.short}`, homeFilter.theme === info.key, pick(info.key), count)));
+  }
+
+  const shown = all.filter((item) => matchesTheme(item.recipe, homeFilter.theme) && matchesSearch(item));
   $("saved-none").hidden = !(all.length > 0 && shown.length === 0);
-
-  const ul = $("saved-list");
-  ul.replaceChildren();
-  shown.forEach((item) => {
-    const li = el("li");
-
-    const cb = el("input");
-    cb.type = "checkbox";
-    cb.className = "sel";
-    cb.checked = selected.has(item.id);
-    cb.setAttribute("aria-label", `Ajouter « ${item.recipe.title} » à la liste de courses`);
-    cb.addEventListener("change", () => {
-      if (cb.checked) selected.add(item.id);
-      else selected.delete(item.id);
-      updateMakeList();
-    });
-
-    const open = el("button", "open");
-    open.type = "button";
-    open.append(el("span", "open-title", item.recipe.title));
-    const meta = [
-      item.recipe.category,
-      `${item.recipe.ingredients.length} ingrédient${item.recipe.ingredients.length > 1 ? "s" : ""}`,
-      item.servings ? `${item.servings} portions` : null,
-    ].filter(Boolean);
-    open.append(el("small", "open-meta", meta.join(" · ")));
-    open.addEventListener("click", () =>
-      showRecipe(item.recipe, { servings: item.servings, videoId: item.videoId || null, savedId: item.id }),
-    );
-
-    const del = el("button", "del", "Supprimer");
-    del.type = "button";
-    del.addEventListener("click", () => {
-      if (!window.confirm(`Supprimer « ${item.recipe.title} » ?`)) return;
-      selected.delete(item.id);
-      store.storeSaved(store.loadSaved().filter((r) => r.id !== item.id));
-      renderSaved();
-    });
-
-    li.append(cb, open, del);
-    ul.append(li);
-  });
-
-  // seules les fiches existantes peuvent rester cochées
-  const ids = new Set(all.map((r) => r.id));
-  [...selected].forEach((id) => !ids.has(id) && selected.delete(id));
-  updateMakeList();
-
-  const last = store.getSetting("lastExport", null);
-  $("last-export").textContent = last
-    ? "Dernière sauvegarde : " + new Date(last).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })
-    : all.length
-      ? "Tu n'as encore jamais exporté tes recettes."
-      : "";
+  $("saved-list").replaceChildren(...shown.map((item) => h("li", {}, recipeRow(item, () => openItem(item)))));
 }
 
+$("search").addEventListener("input", () => {
+  homeFilter.q = $("search").value;
+  renderHome();
+});
+
+/* ---------- Thématiques ---------- */
+function renderThemes() {
+  const counts = themeCounts(store.loadSaved());
+  $("themes-empty").hidden = counts.length > 0;
+  $("theme-grid").replaceChildren(
+    ...counts.map(({ info, count }) =>
+      themeTile(info, count, () => {
+        openedTheme = info.key;
+        goto("theme");
+      }),
+    ),
+  );
+}
+
+function renderTheme() {
+  const info = themeInfo(openedTheme);
+  const items = store.loadSaved().filter((item) => matchesTheme(item.recipe, openedTheme));
+  $("theme-title").textContent = `${info.emoji} ${info.label}`;
+  $("theme-count").textContent = `${items.length} recette${items.length > 1 ? "s" : ""}`
+    + (openedTheme === NO_THEME ? " — ouvre-les et touche « Modifier » pour les classer." : "");
+  $("theme-list").replaceChildren(...items.map((item) => h("li", {}, recipeRow(item, () => openItem(item)))));
+}
+$("theme-back").addEventListener("click", () => goto("themes"));
+
+/* ---------- Courses : choix des recettes, puis liste groupée ---------- */
 function updateMakeList() {
   const n = selected.size;
   $("make-list").disabled = n === 0;
   $("make-list").textContent = n ? `Liste de courses (${n})` : "Liste de courses";
 }
 
-$("search").addEventListener("input", () => {
-  savedFilter.q = $("search").value;
-  renderSaved();
-});
+function renderShopPick() {
+  const all = store.loadSaved();
+  $("shop-pick").hidden = false;
+  $("shop-result").hidden = true;
+  $("shop-empty").hidden = all.length > 0;
+  $("shop-recipes").replaceChildren(
+    ...all.map((item) => {
+      const cb = h("input", {
+        type: "checkbox", class: "sel", id: "sel-" + item.id,
+        "aria-label": `Ajouter « ${item.recipe.title} » à la liste de courses`,
+      });
+      cb.checked = selected.has(item.id);
+      cb.addEventListener("change", () => {
+        if (cb.checked) selected.add(item.id);
+        else selected.delete(item.id);
+        updateMakeList();
+      });
+      return h(
+        "div",
+        { class: "pick-row" },
+        h(
+          "label",
+          { for: cb.id },
+          cb,
+          thumb(item.recipe),
+          h("span", { class: "row-body" }, h("span", { class: "row-title", text: item.recipe.title }), h("span", { class: "row-meta", text: `${item.servings || item.recipe.servings || 4} portions` })),
+        ),
+      );
+    }),
+  );
+  // seules les fiches existantes peuvent rester cochées
+  const ids = new Set(all.map((r) => r.id));
+  [...selected].forEach((id) => !ids.has(id) && selected.delete(id));
+  updateMakeList();
+}
 
-/* ---------- Liste de courses groupée ---------- */
 $("make-list").addEventListener("click", () => {
   const chosen = store.loadSaved().filter((r) => selected.has(r.id));
   if (!chosen.length) return;
@@ -546,30 +568,45 @@ $("make-list").addEventListener("click", () => {
     .map((r) => `${r.recipe.title} (${r.servings || r.recipe.servings || 4} portions)`)
     .join(" · ");
 
-  const ul = $("shopping-list");
-  ul.replaceChildren();
-  lastShopping.forEach((line, i) => {
-    const li = el("li");
-    const cb = el("input");
-    cb.type = "checkbox";
-    cb.id = "shop-" + i;
-    cb.addEventListener("change", () => li.classList.toggle("done", cb.checked));
-    const label = el("label", "plain", shoppingLine(line));
-    label.htmlFor = cb.id;
-    if (chosen.length > 1) label.append(el("span", "approx", " — " + line.from.join(", ")));
-    li.append(cb, label);
-    ul.append(li);
-  });
-  showView("shopping");
+  $("shopping-list").replaceChildren(
+    ...lastShopping.map((line, i) => {
+      const cb = h("input", { type: "checkbox", id: "shop-" + i });
+      const row = h("li", { class: "check-row" });
+      cb.addEventListener("change", () => row.classList.toggle("done", cb.checked));
+      const label = h("label", { for: cb.id, text: shoppingLine(line) });
+      if (chosen.length > 1) label.append(h("span", { class: "approx", text: " — " + line.from.join(", ") }));
+      row.append(cb, label);
+      return row;
+    }),
+  );
+  $("shop-pick").hidden = true;
+  $("shop-result").hidden = false;
+  window.scrollTo({ top: 0 });
 });
 
 $("shopping-back").addEventListener("click", () => {
-  renderSaved();
-  showView("saved");
+  renderShopPick();
+  window.scrollTo({ top: 0 });
 });
 $("shopping-copy").addEventListener("click", () =>
   copyText(lastShopping.map((l) => "- " + shoppingLine(l)).join("\n"), "Liste copiée"),
 );
+
+/* ---------- Réglages ---------- */
+function renderMore() {
+  const all = store.loadSaved();
+  const last = store.getSetting("lastExport", null);
+  $("last-export").textContent = last
+    ? "Dernière sauvegarde : " + new Date(last).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })
+    : all.length
+      ? "Tu n'as encore jamais exporté tes recettes."
+      : "";
+}
+
+$("forget-code").addEventListener("click", () => {
+  store.setAccessCode("");
+  toast("Code oublié sur cet appareil");
+});
 
 /* ---------- Sauvegarde : export / import ---------- */
 $("export").addEventListener("click", () => {
@@ -584,7 +621,7 @@ $("export").addEventListener("click", () => {
   a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   store.setSetting("lastExport", Date.now());
-  renderSaved();
+  renderMore();
   toast(`${saved.length} recette${saved.length > 1 ? "s" : ""} exportée${saved.length > 1 ? "s" : ""}`);
 });
 
@@ -607,7 +644,7 @@ $("import-file").addEventListener("change", async () => {
     const { items, rejected } = parseImport(await readText(file));
     const { list, added, updated } = mergeSaved(store.loadSaved(), items);
     if (!store.storeSaved(list)) throw new Error("Stockage plein : impossible d'importer.");
-    renderSaved();
+    renderMore();
     const parts = [`${added} ajoutée${added > 1 ? "s" : ""}`];
     if (updated) parts.push(`${updated} mise${updated > 1 ? "s" : ""} à jour`);
     if (rejected) parts.push(`${rejected} ignorée${rejected > 1 ? "s" : ""}`);
@@ -618,6 +655,9 @@ $("import-file").addEventListener("change", async () => {
     input.value = ""; // permet de réimporter le même fichier
   }
 });
+
+/* ---------- Démarrage ---------- */
+goto("home");
 
 /* ---------- Partage Android (share_target) ---------- */
 (function handleShare() {
