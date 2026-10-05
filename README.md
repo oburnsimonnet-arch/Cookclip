@@ -7,6 +7,7 @@ PWA installable sur Android + une route serverless (`/api/recipe`) qui confie la
 ## Fonctions
 
 - **Extraction** : Gemini regarde et écoute la vidéo (voix, texte affiché à l'écran, images). Il a pour consigne de ne **jamais inventer** une quantité : ce qui n'est pas dit ni affiché est marqué « quantité non précisée ».
+- **Recherche web** : onglet Recherche. Gemini cherche sur Google (outil de recherche intégré) et rédige 3 fiches en français à partir de vraies pages de cuisine ; chaque fiche garde le nom du site et un lien vers la page. Un seul appel par recherche ; une recherche déjà faite pendant la session ne rappelle pas Gemini. Le lien est vérifié contre les pages réellement consultées par la recherche, jamais pris tel quel dans la réponse du modèle.
 - **En français** : case cochée par défaut ; une vidéo en anglais donne une recette traduite.
 - **Portions** ajustables, ingrédients à cocher, liste de courses copiable.
 - **Modifier** : corrige titre, catégorie, portions, ingrédients et étapes à la main (ajout, suppression, fractions `1/2` acceptées). Une fiche déjà enregistrée est mise à jour automatiquement.
@@ -82,6 +83,7 @@ npx vercel dev               # lance le site et l'API en local
 - **Quantités approximatives** : « un peu de », « à l'œil » restent sans valeur et sont signalées ; relis toujours les avertissements.
 - **Catégorie et mots-clés** sont proposés par Gemini et peuvent être faux (« végétarien » en particulier) : corrige-les avec **Modifier**.
 - **Écran allumé** : dépend du navigateur ; si l'appareil ne le permet pas, le mode cuisine prévient et fonctionne quand même.
+- **Recherche web** : les fiches sont reformulées par Gemini (pas copiées) et peuvent contenir des erreurs ; un avertissement le rappelle sur chaque fiche. La recherche Google intégrée peut dépendre de ton offre Gemini : si elle est refusée, l'application affiche « La recherche a échoué » et les logs Vercel donnent la raison.
 - **Une seule langue d'interface** (français).
 - **Recettes enregistrées avant les thématiques** : elles vont dans « Non classées » ; ouvre-les et touche **Modifier** pour les classer.
 - **Bouton retour du téléphone** : il quitte l'application au lieu de revenir à l'écran précédent (utilise la flèche de l'application).
@@ -90,6 +92,8 @@ npx vercel dev               # lance le site et l'API en local
 
 ```
 api/recipe.ts      route serverless (code d'accès, vidéo ou transcription)
+api/search.ts      recherche de recettes sur le web (Gemini + recherche Google)
+lib/search.ts      prompt, appel et vérification des sources
 api/classify.ts    classement par thématiques de recettes déjà enregistrées (un appel)
 lib/classify.ts    prompt et validation du classement
 lib/access.ts      vérification du code d'accès

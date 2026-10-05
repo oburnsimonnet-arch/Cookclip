@@ -36,6 +36,23 @@ export function cleanEmoji(v) {
   return s && s.length <= 16 && EMOJI_RE.test(s) ? s : null;
 }
 
+/** Page d'où vient une recette trouvée sur le web : nom + lien http(s) seulement. */
+export function cleanSource(v) {
+  if (!v || typeof v !== "object") return null;
+  const name = typeof v.name === "string" ? v.name.trim().slice(0, 80) : "";
+  if (!name) return null;
+  let url = null;
+  if (typeof v.url === "string" && v.url.length <= 1000) {
+    try {
+      const u = new URL(v.url);
+      if (u.protocol === "https:" || u.protocol === "http:") url = u.href;
+    } catch {
+      /* lien invalide : le nom seul est gardé */
+    }
+  }
+  return { name, url };
+}
+
 const strList = (v, max) =>
   (Array.isArray(v) ? v : []).map(str).filter(Boolean).slice(0, max);
 
@@ -79,6 +96,7 @@ export function sanitizeRecipe(raw) {
   if (ingredients.length === 0 && steps.length === 0) return null;
 
   const category = str(raw.category);
+  const source = cleanSource(raw.source);
   return {
     title: (str(raw.title) || "Recette sans titre").slice(0, 200),
     language: str(raw.language) || "fr",
@@ -93,5 +111,6 @@ export function sanitizeRecipe(raw) {
     steps,
     tips: strList(raw.tips, 50),
     warnings: strList(raw.warnings, 50),
+    ...(source ? { source } : {}),
   };
 }

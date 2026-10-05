@@ -65,6 +65,7 @@ function setStatus(msg, isError = false) {
 /* ---------- Écrans ---------- */
 const SCREENS = {
   home: { id: "view-home", tab: "tab-home" },
+  search: { id: "view-search", tab: "tab-search" },
   themes: { id: "view-themes", tab: "tab-themes" },
   theme: { id: "view-theme", tab: "tab-themes" },
   shopping: { id: "view-shopping", tab: "tab-shopping" },
@@ -78,7 +79,7 @@ function visibleScreen() {
 
 function showScreen(name) {
   for (const [key, s] of Object.entries(SCREENS)) $(s.id).hidden = key !== name;
-  for (const id of ["tab-home", "tab-themes", "tab-shopping", "tab-more"]) {
+  for (const id of ["tab-home", "tab-search", "tab-themes", "tab-shopping", "tab-more"]) {
     const on = SCREENS[name].tab === id;
     if (on) $(id).setAttribute("aria-current", "page");
     else $(id).removeAttribute("aria-current");
@@ -90,6 +91,7 @@ function showScreen(name) {
 /** Affiche un écran en recalculant son contenu. */
 function goto(name) {
   if (name === "home") renderHome();
+  else if (name === "search") renderSearch();
   else if (name === "themes") renderThemes();
   else if (name === "theme") renderTheme();
   else if (name === "shopping") renderShopPick();
@@ -98,6 +100,7 @@ function goto(name) {
 }
 
 $("tab-home").addEventListener("click", () => goto("home"));
+$("tab-search").addEventListener("click", () => goto("search"));
 $("tab-themes").addEventListener("click", () => goto("themes"));
 $("tab-shopping").addEventListener("click", () => goto("shopping"));
 $("tab-more").addEventListener("click", () => goto("more"));
@@ -203,6 +206,14 @@ function renderRecipe({ keepPicker = false } = {}) {
   const sourceUrl = videoUrl(current.videoId);
   $("r-source").hidden = !sourceUrl;
   if (sourceUrl) $("r-source-link").href = sourceUrl;
+
+  const web = recipe.source;
+  $("r-web").hidden = !web;
+  if (web) {
+    $("r-web-name").textContent = web.name;
+    $("r-web-link").hidden = !web.url;
+    if (web.url) $("r-web-link").href = web.url;
+  }
 
   $("share").hidden = !navigator.share;
   $("refresh").hidden = !current.videoId;
@@ -324,6 +335,11 @@ $("access-form").addEventListener("submit", (e) => {
     const task = pending;
     pending = null;
     if (task.classify) autoClassify();
+    else if (task.search) {
+      goto("search");
+      $("web-query").value = task.query;
+      searchWeb(task.query);
+    }
     else extract(task.payload, task.opts);
   }
 });
@@ -524,6 +540,92 @@ function renderHome() {
 $("search").addEventListener("input", () => {
   homeFilter.q = $("search").value;
   renderHome();
+});
+
+/* ---------- Recherche sur le web (un seul appel Gemini avec recherche Google) ---------- */
+const webState = { query: "", results: [] };
+const webCache = new Map(); // requête normalisée -> résultats : relancer la même recherche ne coûte rien
+
+function renderSearch() {
+  $("web-results").replaceChildren(
+    ...webState.results.map(({ recipe, source }) => {
+      const time = formatDuration((recipe.prepTimeMin || 0) + (recipe.cookTimeMin || 0));
+      const meta = [source.name, time, recipe.servings ? `${recipe.servings} pers.` : ""].filter(Boolean).join(" · ");
+      return h(
+        "li",
+        {},
+        h(
+          "button",
+          { type: "button", class: "row-card open", onClick: () => showRecipe(recipe) },
+          thumb(recipe),
+          h("span", { class: "row-body" }, h("span", { class: "row-title", text: recipe.title }), h("span", { class: "result-meta", text: meta })),
+        ),
+      );
+    }),
+  );
+}
+
+function setWebStatus(msg, isError = false) {
+  const s = $("web-status");
+  s.hidden = !msg;
+  s.textContent = msg || "";
+  s.classList.toggle("error", isError);
+}
+
+async function searchWeb(query) {
+  const q = query.replace(/\s+/g, " ").trim();
+  if (q.length < 2) return;
+  const key = nameKey(q);
+  if (webCache.has(key)) {
+    webState.query = q;
+    webState.results = webCache.get(key);
+    setWebStatus(webState.results.length ? "" : "Aucune recette trouvée. Essaie d'autres mots.");
+    renderSearch();
+    return toast("Recherche déjà faite : aucun appel à Gemini");
+  }
+  const btn = $("web-go");
+  btn.disabled = true;
+  setWebStatus("Recherche sur le web… (jusqu'à une minute)");
+  try {
+    const code = store.getAccessCode();
+    const res = await fetch("/api/search", {
+      method: "POST",
+      headers: { "content-type": "application/json", ...(code ? { "x-access-code": code } : {}) },
+      body: JSON.stringify({ query: q }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 401 || data.code === "AUTH_REQUIRED") {
+      pending = { search: true, query: q };
+      if (code) store.setAccessCode("");
+      goto("home");
+      $("access-form").hidden = false;
+      $("access-code").value = "";
+      $("access-code").focus();
+      setStatus(code ? "Code incorrect. Réessaie." : "Code d'accès requis.", true);
+      return setWebStatus("");
+    }
+    if (!res.ok) throw new Error(data.error || "Erreur " + res.status);
+    const results = (Array.isArray(data.results) ? data.results : [])
+      .map((r) => {
+        const recipe = sanitizeRecipe(r && r.recipe);
+        return recipe && recipe.source ? { recipe, source: recipe.source } : null;
+      })
+      .filter(Boolean);
+    webState.query = q;
+    webState.results = results;
+    if (results.length) webCache.set(key, results);
+    setWebStatus(results.length ? "" : "Aucune recette trouvée. Essaie d'autres mots.");
+    renderSearch();
+  } catch (err) {
+    setWebStatus(err.message || "Échec de la recherche.", true);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+$("search-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  searchWeb($("web-query").value);
 });
 
 /* ---------- Thématiques ---------- */

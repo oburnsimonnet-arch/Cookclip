@@ -956,3 +956,92 @@ test("accueil : la dernière recette est « à la une », sauf quand on filtre o
   await app.type("search", "potiron");
   assert.equal(app.visible("home-hero"), false);
 });
+
+/* ======================= Recherche sur le web ======================= */
+
+const WEB = (title: string, site = "marmiton.org") => ({
+  recipe: { ...SOUPE, title, themes: ["france"], source: { name: site, url: `https://vertex.test/${site}` }, warnings: [`Recette reformulée par Gemini d'après ${site}`] },
+  source: { name: site, url: `https://vertex.test/${site}` },
+});
+
+test("recherche web : un appel, 3 résultats, fiche avec source, enregistrement qui garde la source", async () => {
+  const app = await boot({ replies: [{ status: 200, body: { results: [WEB("Gratin A"), WEB("Gratin B", "cuisineactuelle.fr"), WEB("Gratin C")] } }] });
+  await app.click("tab-search");
+  assert.equal(app.visible("view-search"), true);
+  await app.type("web-query", "gratin dauphinois");
+  await app.submit("search-form");
+  assert.equal(app.calls.length, 1);
+  assert.equal(app.calls[0].url, "/api/search");
+  assert.deepEqual(app.calls[0].body, { query: "gratin dauphinois" });
+  assert.equal(app.$("web-results").children.length, 3);
+  assert.match(app.text("web-results"), /Gratin B/);
+  assert.match(app.text("web-results"), /cuisineactuelle\.fr/);
+
+  await app.click(app.all("#web-results .open")[1]);
+  assert.equal(app.text("r-title"), "Gratin B");
+  assert.equal(app.visible("r-web"), true);
+  assert.equal(app.text("r-web-name"), "cuisineactuelle.fr");
+  assert.equal(app.$("r-web-link").href, "https://vertex.test/cuisineactuelle.fr");
+  assert.equal(app.visible("r-source"), false); // pas de vidéo
+
+  await app.click("save");
+  assert.equal(app.saved()[0].recipe.source.name, "cuisineactuelle.fr");
+  assert.equal(app.saved()[0].videoId, null);
+
+  await app.click("back");
+  assert.equal(app.visible("view-search"), true);
+  assert.equal(app.$("web-results").children.length, 3); // les résultats sont conservés
+});
+
+test("recherche web : même recherche = aucun nouvel appel ; une adresse non http(s) est écartée", async () => {
+  const evil = WEB("Piégée");
+  evil.recipe.source = { name: "x.fr", url: "javascript:alert(1)" } as any;
+  const app = await boot({ replies: [{ status: 200, body: { results: [evil] } }] });
+  await app.click("tab-search");
+  await app.type("web-query", "Gratin");
+  await app.submit("search-form");
+  await app.click(app.all("#web-results .open")[0]);
+  assert.equal(app.$("r-web-link").hidden, true);
+  await app.click("back");
+  await app.type("web-query", "  gratin ");
+  await app.submit("search-form");
+  assert.equal(app.calls.length, 1);
+  assert.match(app.text("toast"), /aucun appel/);
+});
+
+test("recherche web : aucun résultat, erreur serveur, code d'accès demandé puis recherche reprise", async () => {
+  const app = await boot({
+    replies: [
+      { status: 200, body: { results: [] } },
+      { status: 429, body: { error: "Limite d'utilisation de Gemini atteinte." } },
+      { status: 401, body: { code: "AUTH_REQUIRED" } },
+      { status: 200, body: { results: [WEB("Tarte")] } },
+    ],
+  });
+  await app.click("tab-search");
+  await app.type("web-query", "zzz");
+  await app.submit("search-form");
+  assert.match(app.text("web-status"), /Aucune recette trouvée/);
+  await app.type("web-query", "tarte");
+  await app.submit("search-form");
+  assert.match(app.text("web-status"), /Limite/);
+  assert.equal(app.$("web-go").disabled, false);
+  await app.submit("search-form"); // 401
+  assert.equal(app.visible("access-form"), true);
+  await app.type("access-code", "secret");
+  await app.submit("access-form");
+  assert.equal(app.calls[3].headers["x-access-code"], "secret");
+  assert.equal(app.visible("view-search"), true);
+  assert.equal(app.$("web-results").children.length, 1);
+});
+
+test("recherche web : la source survit à une modification et à un export/import", async () => {
+  const item = savedItem({ ...SOUPE, source: { name: "marmiton.org", url: "https://m.test/r" } }, { videoId: null, id: "Soupe|1" });
+  const app = await boot({ storage: withSaved([item]) });
+  await app.click(app.all("#saved-list .open")[0]);
+  await openEditor(app);
+  await app.type("e-title", "Soupe corrigée");
+  await app.click(app.$("recipe-edit").querySelector("[type=submit]"));
+  assert.equal(app.saved()[0].recipe.source.url, "https://m.test/r");
+  assert.equal(app.text("r-web-name"), "marmiton.org");
+});

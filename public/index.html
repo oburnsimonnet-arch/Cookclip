@@ -80,6 +80,25 @@
       <ul id="saved-list" class="rows"></ul>
     </section>
 
+    <!-- Recherche sur le web -->
+    <section id="view-search" class="view" hidden>
+      <header class="page-head">
+        <div>
+          <p class="eyebrow">Sur le web</p>
+          <h1 class="display">Recherche</h1>
+          <p class="lead">Gemini cherche sur Google et te propose 3 recettes de sites de cuisine.</p>
+        </div>
+      </header>
+      <form id="search-form" class="card capture" autocomplete="off">
+        <label class="field-label" for="web-query">Que veux-tu cuisiner ?</label>
+        <input id="web-query" type="search" maxlength="200" placeholder="gratin dauphinois, ou « courgettes, feta, menthe »" required>
+        <button id="web-go" class="btn btn-primary btn-block" type="submit"><span data-icon="search" data-size="18"></span>Chercher des recettes</button>
+      </form>
+      <p id="web-status" class="status" role="status" aria-live="polite" hidden></p>
+      <ul id="web-results" class="rows" style="margin-top:16px"></ul>
+      <p class="hint" id="web-hint" style="margin-top:16px">Une recherche utilise 1 requête de ton quota Gemini. Les fiches sont reformulées par Gemini : compare avec le site d'origine.</p>
+    </section>
+
     <!-- Thématiques -->
     <section id="view-themes" class="view" hidden>
       <header class="page-head">
@@ -220,6 +239,11 @@
           <ul id="r-tips"></ul>
         </div>
 
+        <p id="r-web" class="source" hidden>
+          <span class="hint">Trouvée sur <strong id="r-web-name"></strong></span>
+          <a id="r-web-link" class="btn btn-soft" href="#" target="_blank" rel="noopener noreferrer">Voir la page<span data-icon="external" data-size="16"></span></a>
+        </p>
+
         <p id="r-source" class="source" hidden>
           <span class="hint">Vidéo d'origine</span>
           <a id="r-source-link" class="btn btn-soft" href="#" target="_blank" rel="noopener noreferrer">Ouvrir sur YouTube<span data-icon="external" data-size="16"></span></a>
@@ -247,6 +271,7 @@
   <nav id="bottom-nav" class="bottom-nav" aria-label="Navigation principale">
     <div class="inner">
       <button id="tab-home" class="tab" type="button"><span data-icon="home" data-size="22"></span>Accueil</button>
+      <button id="tab-search" class="tab" type="button"><span data-icon="search" data-size="22"></span>Recherche</button>
       <button id="tab-themes" class="tab" type="button"><span data-icon="compass" data-size="22"></span>Thèmes</button>
       <button id="tab-shopping" class="tab" type="button"><span data-icon="cart" data-size="22"></span>Courses</button>
       <button id="tab-more" class="tab" type="button"><span data-icon="sliders" data-size="22"></span>Réglages</button>

@@ -100,6 +100,29 @@ export function cleanEmoji(v: unknown): string | null {
   return s && s.length <= 16 && EMOJI_RE.test(s) ? s : null;
 }
 
+/** Page web d'où vient une recette trouvée par la recherche (nom du site, lien http(s) si on l'a). */
+export interface RecipeSource {
+  name: string;
+  url: string | null;
+}
+
+export function cleanSource(v: unknown): RecipeSource | null {
+  if (!v || typeof v !== "object") return null;
+  const o = v as Record<string, unknown>;
+  const name = typeof o.name === "string" ? o.name.trim().slice(0, 80) : "";
+  if (!name) return null;
+  let url: string | null = null;
+  if (typeof o.url === "string" && o.url.length <= 1000) {
+    try {
+      const u = new URL(o.url);
+      if (u.protocol === "https:" || u.protocol === "http:") url = u.href;
+    } catch {
+      /* lien invalide : on garde seulement le nom */
+    }
+  }
+  return { name, url };
+}
+
 export interface Recipe {
   title: string;
   language: string;
@@ -118,6 +141,8 @@ export interface Recipe {
   tips: string[];
   /** Remarques sur la fiabilité de l'extraction (quantités manquantes, etc.) */
   warnings: string[];
+  /** Présent seulement pour une recette trouvée sur le web */
+  source?: RecipeSource | null;
 }
 
 /** Ramène la catégorie proposée par le modèle à l'une des catégories connues. */
