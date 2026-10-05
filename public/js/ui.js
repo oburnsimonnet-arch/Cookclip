@@ -27,14 +27,38 @@ export function recipeRow(item, onOpen) {
   const time = formatDuration(totalMinutes(recipe));
   const first = recipeThemes(recipe)[0];
   const meta = h("span", { class: "row-meta" });
-  if (time) meta.append(h("span", {}, icon("clock", 14), time));
-  if (item.servings) meta.append(h("span", {}, icon("users", 14), `${item.servings} pers.`));
-  if (first) meta.append(h("span", {}, themeInfo(first).short));
+  if (time) meta.append(h("span", {}, icon("clock", 12), time));
+  if (item.servings) meta.append(h("span", {}, icon("users", 12), `${item.servings} pers.`));
+  if (first) meta.append(h("span", { class: "pill" }, themeInfo(first).short));
+  else meta.append(h("span", { class: "pill pill-none" }, "Non classée"));
   return h(
     "button",
     { type: "button", class: "row-card open", onClick: onOpen },
     thumb(recipe),
     h("span", { class: "row-body" }, h("span", { class: "row-title", text: recipe.title }), meta),
+  );
+}
+
+/** Grande carte « à la une » : dégradé de la thématique, emoji, titre en bas. */
+export function heroCard(item, onOpen) {
+  const { recipe } = item;
+  const time = formatDuration(totalMinutes(recipe));
+  const first = recipeThemes(recipe)[0];
+  const meta = h("div", { class: "hero-meta" });
+  if (time) meta.append(h("span", {}, icon("clock", 13), time));
+  if (item.servings) meta.append(h("span", {}, icon("users", 13), `${item.servings} pers.`));
+  if (first) meta.append(h("span", {}, themeInfo(first).short));
+  return h(
+    "button",
+    { type: "button", id: "home-hero-open", class: "hero-card", style: `background:${primaryTheme(recipe).gradient}`, onClick: onOpen },
+    h("span", { class: "hero-emoji", "aria-hidden": "true" }, recipeEmoji(recipe)),
+    h(
+      "span",
+      { class: "hero-text" },
+      h("span", { class: "hero-badge" }, icon("chef-hat", 12), "Dernière recette"),
+      h("span", { class: "hero-title", text: recipe.title }),
+      meta,
+    ),
   );
 }
 

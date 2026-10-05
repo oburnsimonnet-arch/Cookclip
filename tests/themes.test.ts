@@ -184,3 +184,35 @@ test("application : sanitizeRecipe garde thématiques (connues et perso) et emoj
   assert.equal(cleanEmoji("🥞"), "🥞");
   assert.equal(cleanEmoji("🥞🥞"), null);
 });
+
+/* ---------- classement automatique ---------- */
+import { classifyRecipes, CLASSIFY_PROMPT } from "../lib/classify.js";
+
+test("classement : une seule requête, clés valides, identifiants absents -> liste vide", async () => {
+  let calls = 0;
+  let sent = "";
+  const client: any = {
+    models: {
+      generateContent: async (req: any) => {
+        calls++;
+        sent = req.contents;
+        return { text: '{"themes": {"a": ["Italie", "rapide", "n-importe-quoi"], "b": "asie", "zzz": ["france"]}}' };
+      },
+    },
+  };
+  const out = await classifyRecipes(
+    [{ id: "a", title: "Pâtes" }, { id: "b", title: "Gyoza" }, { id: "c", title: "Autre" }],
+    { client },
+  );
+  assert.equal(calls, 1);
+  assert.deepEqual(out, { a: ["italie", "rapide"], b: ["asie"], c: [] });
+  assert.match(sent, /Gyoza/);
+  for (const t of SERVER_THEMES) assert.ok(CLASSIFY_PROMPT.includes(`- ${t.key} :`));
+});
+
+test("classement : sans recette, aucun appel ; réponse vide -> erreur", async () => {
+  const never: any = { models: { generateContent: async () => assert.fail("appel inutile") } };
+  assert.deepEqual(await classifyRecipes([], { client: never }), {});
+  const empty: any = { models: { generateContent: async () => ({ text: "" }) } };
+  await assert.rejects(classifyRecipes([{ id: "a", title: "x" }], { client: empty }));
+});

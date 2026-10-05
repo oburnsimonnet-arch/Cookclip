@@ -88,10 +88,10 @@ async function boot(opts: BootOptions = {}) {
   for (const [k, v] of Object.entries(opts.storage ?? {})) w.localStorage.setItem(k, v);
 
   // --- le serveur et le téléphone sont simulés ---
-  const calls: { headers: Record<string, string>; body: any }[] = [];
+  const calls: { url: string; headers: Record<string, string>; body: any }[] = [];
   const queue = [...(opts.replies ?? [])];
   w.fetch = async (_url: string, init: any) => {
-    calls.push({ headers: init.headers, body: JSON.parse(init.body) });
+    calls.push({ url: _url, headers: init.headers, body: JSON.parse(init.body) });
     const reply = queue.shift() ?? ok();
     return { ok: reply.status < 400, status: reply.status, json: async () => reply.body };
   };
@@ -622,7 +622,7 @@ test("rangement : recherche par titre, ingrédient ou mot-clé, sans tenir compt
 test("rangement : filtre par thématique depuis l'accueil", async () => {
   const app = await boot({ storage: two() });
   const chips = app.all("#theme-chips .chip");
-  assert.deepEqual(chips.map((c: any) => c.textContent), ["Toutes2", "🥖 France1", "⏱️ Rapide1", "🍲 Mijotés1"]);
+  assert.deepEqual(chips.map((c: any) => c.textContent), ["✨ Tout2", "🥖 France1", "⏱️ Rapide1", "🍲 Mijotés1"]);
   await app.click(chips[3]);
   assert.equal(app.$("saved-list").children.length, 1);
   assert.match(app.text("saved-list"), /Soupe de potiron/);
@@ -862,4 +862,97 @@ test("réglages : oublier le code d'accès", async () => {
   await app.click("forget-code");
   assert.match(app.text("toast"), /Code oublié/);
   assert.ok(!app.w.localStorage.getItem("cookclip.access.v1") || !/secret/.test(app.w.localStorage.getItem("cookclip.access.v1")));
+});
+
+/* ======================= Classement des recettes sans thématique ======================= */
+
+test("classement : une recette sans thème se classe depuis sa fiche, sans passer par Modifier", async () => {
+  const bare = { ...SOUPE, themes: [] };
+  const app = await boot({ storage: withSaved([savedItem(bare)]) });
+  assert.match(app.text("saved-list"), /Non classée/);
+  await app.click(app.all("#saved-list .open")[0]);
+  assert.equal(app.$("r-classify").open, true); // ouvert d'office quand il n'y a rien
+  assert.equal(app.text("r-classify-title"), "Classer cette recette");
+  await app.click(app.$("c-themes").querySelector('[data-theme="reconfort"]'));
+  assert.deepEqual(app.saved()[0].recipe.themes, ["reconfort"]);
+  assert.match(app.text("r-themes"), /Plats mijotés/);
+  assert.equal(app.text("r-classify-title"), "Modifier les thématiques");
+  await app.type("c-theme-new", "Dimanche");
+  await app.click("c-theme-add");
+  assert.deepEqual(app.saved()[0].recipe.themes, ["reconfort", "Dimanche"]);
+});
+
+test("classement : une fiche pas encore enregistrée garde son thème dans la mémoire des extractions", async () => {
+  const app = await boot({ replies: [ok({ ...SOUPE, themes: [] })] });
+  await app.extract(LINK);
+  await app.click(app.$("c-themes").querySelector('[data-theme="asie"]'));
+  assert.equal(app.saved().length, 0);
+  await app.click("back");
+  await app.extract(LINK);
+  assert.equal(app.calls.length, 1); // relu depuis la mémoire
+  assert.match(app.text("r-themes"), /Asie/);
+});
+
+test("classement automatique : un seul appel pour toutes les recettes sans thème", async () => {
+  const a = savedItem({ ...SOUPE, themes: [] }, { id: "v:" + ID, videoId: ID });
+  const b = savedItem({ ...RECIPE, title: "Gyoza", themes: [] }, { id: "v:" + ID2, videoId: ID2 });
+  const c = savedItem({ ...RECIPE, title: "Déjà classée", themes: ["france"] }, { id: "v:ccc", videoId: "ccc" });
+  const app = await boot({
+    storage: withSaved([a, b, c]),
+    replies: [{ status: 200, body: { themes: { ["v:" + ID]: ["reconfort"], ["v:" + ID2]: ["asie", "rapide"] } } }],
+  });
+  await app.click("tab-themes");
+  assert.equal(app.visible("classify-banner"), true);
+  assert.match(app.text("classify-count"), /2 recettes/);
+  await app.click(app.all(".auto-classify")[0]);
+  assert.equal(app.calls.length, 1);
+  assert.equal(app.calls[0].url, "/api/classify");
+  assert.deepEqual(app.calls[0].body.recipes.map((r: any) => r.id), ["v:" + ID, "v:" + ID2]);
+  assert.match(app.text("toast"), /2 recettes classées/);
+  assert.deepEqual(app.saved().find((r: any) => r.id === "v:" + ID2).recipe.themes, ["asie", "rapide"]);
+  assert.equal(app.visible("classify-banner"), false);
+  assert.equal(app.all("#theme-grid .tile").some((t: any) => /Non classées/.test(t.textContent)), false);
+});
+
+test("classement automatique : code d'accès demandé, puis le classement reprend", async () => {
+  const a = savedItem({ ...SOUPE, themes: [] });
+  const app = await boot({
+    storage: withSaved([a]),
+    replies: [
+      { status: 401, body: { code: "AUTH_REQUIRED" } },
+      { status: 200, body: { themes: { ["v:" + ID]: ["reconfort"] } } },
+    ],
+  });
+  await app.click("tab-themes");
+  await app.click(app.all(".auto-classify")[0]);
+  assert.equal(app.visible("access-form"), true);
+  await app.type("access-code", "secret");
+  await app.submit("access-form");
+  assert.equal(app.calls.length, 2);
+  assert.equal(app.calls[1].headers["x-access-code"], "secret");
+  assert.deepEqual(app.saved()[0].recipe.themes, ["reconfort"]);
+});
+
+test("classement automatique : erreur du serveur -> message, recettes inchangées", async () => {
+  const app = await boot({
+    storage: withSaved([savedItem({ ...SOUPE, themes: [] })]),
+    replies: [{ status: 429, body: { error: "Limite d'utilisation de Gemini atteinte." } }],
+  });
+  await app.click("tab-themes");
+  await app.click(app.all(".auto-classify")[0]);
+  assert.match(app.text("toast"), /Limite/);
+  assert.deepEqual(app.saved()[0].recipe.themes, []);
+  assert.equal(app.all(".auto-classify")[0].disabled, false);
+});
+
+test("accueil : la dernière recette est « à la une », sauf quand on filtre ou cherche", async () => {
+  const app = await boot({ storage: two() });
+  assert.equal(app.visible("home-hero"), true);
+  assert.match(app.text("home-hero"), /Pâte à crêpes/);
+  assert.equal(app.text("saved-count"), "2 recettes");
+  await app.click(app.all("#home-hero-slot .hero-card")[0]);
+  assert.equal(app.text("r-title"), "Pâte à crêpes");
+  await app.click("back");
+  await app.type("search", "potiron");
+  assert.equal(app.visible("home-hero"), false);
 });

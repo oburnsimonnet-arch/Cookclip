@@ -19,14 +19,21 @@
     <section id="view-home" class="view">
       <header class="page-head">
         <div>
-          <p class="eyebrow">Ta cuisine, en vidéo</p>
-          <h1 class="display">Cookclip</h1>
+          <p class="eyebrow">Bienvenue chez</p>
+          <h1 class="display">Cookclip<span class="dot">.</span></h1>
         </div>
       </header>
 
-      <form id="form" class="card capture" autocomplete="off">
+      <form id="form" class="capture-card capture" autocomplete="off">
+        <div class="capture-head">
+          <span class="capture-icon"><span data-icon="sparkles" data-size="20"></span></span>
+          <div>
+            <h2>Nouvelle recette</h2>
+            <p>Colle le lien d'une vidéo de cuisine</p>
+          </div>
+        </div>
         <div>
-          <label class="field-label" for="url">Lien de la vidéo YouTube</label>
+          <label class="sr-only" for="url">Lien de la vidéo YouTube</label>
           <input id="url" name="url" type="url" inputmode="url" placeholder="https://youtu.be/…" required>
         </div>
         <label class="check"><input id="french" type="checkbox" checked> Rédiger la recette en français</label>
@@ -35,7 +42,7 @@
           <p class="hint">Sur YouTube : « … plus » sous la vidéo, puis « Afficher la transcription ». Copie le texte ici.</p>
           <textarea id="transcript" rows="6" placeholder="Transcription de la vidéo…"></textarea>
         </details>
-        <button id="go" class="btn btn-primary btn-block" type="submit"><span data-icon="sparkles" data-size="18"></span>Extraire la recette</button>
+        <button id="go" class="btn btn-white btn-block" type="submit"><span data-icon="sparkles" data-size="18"></span>Extraire la recette</button>
       </form>
 
       <form id="access-form" class="card access" autocomplete="off" hidden>
@@ -47,13 +54,22 @@
 
       <p id="status" class="status" role="status" aria-live="polite" hidden></p>
 
-      <h2 class="section-title">Mes recettes</h2>
       <div id="saved-tools">
         <div class="search">
           <span class="icon" data-icon="search" data-size="18"></span>
-          <input id="search" type="search" placeholder="Titre, ingrédient, mot-clé…" aria-label="Rechercher une recette">
+          <input id="search" type="search" placeholder="Recette, ingrédient, mot-clé…" aria-label="Rechercher une recette">
         </div>
         <div id="theme-chips" class="chips" role="group" aria-label="Filtrer par thématique"></div>
+      </div>
+
+      <section id="home-hero" class="hero-section" hidden>
+        <h2 class="section-title">À la une</h2>
+        <div id="home-hero-slot"></div>
+      </section>
+
+      <div class="list-head">
+        <h2 id="saved-title" class="section-title">Toutes les recettes</h2>
+        <span id="saved-count" class="hint"></span>
       </div>
       <div id="saved-empty" class="empty" hidden>
         <span class="big" aria-hidden="true">🍳</span>
@@ -61,7 +77,7 @@
         <p>Colle un lien YouTube ci-dessus, puis enregistre la fiche.</p>
       </div>
       <p id="saved-none" class="empty" hidden>Aucune recette ne correspond.</p>
-      <ul id="saved-list" class="rows" style="margin-top:14px"></ul>
+      <ul id="saved-list" class="rows"></ul>
     </section>
 
     <!-- Thématiques -->
@@ -73,6 +89,10 @@
           <p class="lead">Tes recettes rangées par cuisine et par style.</p>
         </div>
       </header>
+      <div id="classify-banner" class="classify-banner" hidden>
+        <p><strong id="classify-count"></strong> sans thématique.</p>
+        <button class="btn btn-primary auto-classify" type="button"><span data-icon="sparkles" data-size="18"></span>Classer automatiquement</button>
+      </div>
       <div id="theme-grid" class="tile-grid"></div>
       <div id="themes-empty" class="empty" hidden>
         <span class="big" aria-hidden="true">🧭</span>
@@ -89,6 +109,10 @@
           <p id="theme-count" class="lead"></p>
         </div>
       </header>
+      <div id="theme-classify" class="classify-banner" hidden>
+        <p>Gemini lit le titre et les ingrédients (un seul appel pour toutes ces recettes). Tu peux aussi les classer une par une depuis leur fiche.</p>
+        <button class="btn btn-primary auto-classify" type="button"><span data-icon="sparkles" data-size="18"></span>Classer automatiquement</button>
+      </div>
       <ul id="theme-list" class="rows"></ul>
     </section>
 
@@ -167,6 +191,12 @@
           <p id="r-tags" class="chip-wrap hint" style="margin-top:8px" hidden></p>
           <div id="r-stats" class="stats"></div>
         </div>
+
+        <details id="r-classify" class="card classify">
+          <summary id="r-classify-title">Classer cette recette</summary>
+          <p class="hint">Jusqu'à 3 thématiques : elles rangent la recette dans l'onglet Thèmes. Les changements sont enregistrés tout de suite.</p>
+          <div id="r-picker"></div>
+        </details>
 
         <div class="card servings">
           <span>Portions</span>

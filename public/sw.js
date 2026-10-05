@@ -18,6 +18,7 @@ const SHELL = [
   "/js/icons.js",
   "/js/themes.js",
   "/js/ui.js",
+  "/js/picker.js",
   "/fonts/fraunces-latin-600-normal.woff2",
   "/fonts/fraunces-latin-700-normal.woff2",
   "/fonts/plus-jakarta-sans-latin-400-normal.woff2",

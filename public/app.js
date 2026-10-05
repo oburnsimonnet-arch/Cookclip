@@ -15,7 +15,8 @@ import { createEditor } from "./js/edit.js";
 import { h } from "./js/dom.js";
 import { hydrateIcons, icon } from "./js/icons.js";
 import { NO_THEME, matchesTheme, primaryTheme, recipeEmoji, recipeThemes, themeCounts, themeInfo } from "./js/themes.js";
-import { chip, emptyState, formatDuration, recipeRow, thumb, themeTile } from "./js/ui.js";
+import { chip, formatDuration, heroCard, recipeRow, thumb, themeTile } from "./js/ui.js";
+import { createThemePicker } from "./js/picker.js";
 
 const $ = (id) => document.getElementById(id);
 hydrateIcons();
@@ -116,8 +117,33 @@ function ingredientLabel(ing) {
   return { qty: parts.join(" "), name: ing.name };
 }
 
-function renderRecipe() {
+/** Les thématiques choisies sur la fiche s'appliquent tout de suite (et sont enregistrées). */
+const picker = createThemePicker({
+  idPrefix: "c",
+  onChange(themes) {
+    if (!current) return;
+    current.recipe = { ...current.recipe, themes };
+    if (current.cacheKey) store.cachePut(current.cacheKey, current.recipe);
+    if (current.savedId) {
+      const list = store.loadSaved();
+      const item = list.find((r) => r.id === current.savedId);
+      if (item) {
+        item.recipe = current.recipe;
+        persist(list, themes.length ? "Thématiques enregistrées" : "Thématiques retirées");
+      }
+    }
+    renderRecipe({ keepPicker: true });
+  },
+});
+$("r-picker").append(picker.element);
+
+function renderRecipe({ keepPicker = false } = {}) {
   const { recipe } = current;
+  if (!keepPicker) {
+    picker.set(recipe.themes);
+    $("r-classify").open = recipeThemes(recipe).length === 0;
+  }
+  $("r-classify-title").textContent = recipeThemes(recipe).length ? "Modifier les thématiques" : "Classer cette recette";
   const theme = primaryTheme(recipe);
   $("r-hero").style.background = theme.gradient;
   $("r-emoji").textContent = recipeEmoji(recipe);
@@ -295,9 +321,10 @@ $("access-form").addEventListener("submit", (e) => {
   $("access-form").hidden = true;
   setStatus("");
   if (pending) {
-    const { payload, opts } = pending;
+    const task = pending;
     pending = null;
-    extract(payload, opts);
+    if (task.classify) autoClassify();
+    else extract(task.payload, task.opts);
   }
 });
 
@@ -478,13 +505,20 @@ function renderHome() {
       homeFilter.theme = key;
       renderHome();
     };
-    box.append(chip("Toutes", !homeFilter.theme, pick(""), all.length));
+    box.append(chip("✨ Tout", !homeFilter.theme, pick(""), all.length));
     counts.forEach(({ info, count }) => box.append(chip(`${info.emoji} ${info.short}`, homeFilter.theme === info.key, pick(info.key), count)));
   }
 
   const shown = all.filter((item) => matchesTheme(item.recipe, homeFilter.theme) && matchesSearch(item));
   $("saved-none").hidden = !(all.length > 0 && shown.length === 0);
+  $("saved-title").textContent = homeFilter.theme ? themeInfo(homeFilter.theme).label : "Toutes les recettes";
+  $("saved-count").textContent = all.length ? `${shown.length} recette${shown.length > 1 ? "s" : ""}` : "";
   $("saved-list").replaceChildren(...shown.map((item) => h("li", {}, recipeRow(item, () => openItem(item)))));
+
+  // « à la une » : la dernière recette enregistrée, tant qu'on ne filtre pas
+  const showHero = all.length > 0 && !homeFilter.theme && !homeFilter.q.trim();
+  $("home-hero").hidden = !showHero;
+  $("home-hero-slot").replaceChildren(...(showHero ? [heroCard(all[0], () => openItem(all[0]))] : []));
 }
 
 $("search").addEventListener("input", () => {
@@ -496,6 +530,9 @@ $("search").addEventListener("input", () => {
 function renderThemes() {
   const counts = themeCounts(store.loadSaved());
   $("themes-empty").hidden = counts.length > 0;
+  const unclassified = store.loadSaved().filter((i) => !recipeThemes(i.recipe).length).length;
+  $("classify-banner").hidden = unclassified === 0;
+  $("classify-count").textContent = `${unclassified} recette${unclassified > 1 ? "s" : ""}`;
   $("theme-grid").replaceChildren(
     ...counts.map(({ info, count }) =>
       themeTile(info, count, () => {
@@ -511,10 +548,70 @@ function renderTheme() {
   const items = store.loadSaved().filter((item) => matchesTheme(item.recipe, openedTheme));
   $("theme-title").textContent = `${info.emoji} ${info.label}`;
   $("theme-count").textContent = `${items.length} recette${items.length > 1 ? "s" : ""}`
-    + (openedTheme === NO_THEME ? " — ouvre-les et touche « Modifier » pour les classer." : "");
+    + (openedTheme === NO_THEME ? " à classer" : "");
+  $("theme-classify").hidden = !(openedTheme === NO_THEME && items.length);
   $("theme-list").replaceChildren(...items.map((item) => h("li", {}, recipeRow(item, () => openItem(item)))));
 }
 $("theme-back").addEventListener("click", () => goto("themes"));
+
+/* ---------- Classement automatique des recettes sans thématique (un seul appel Gemini) ---------- */
+async function autoClassify() {
+  const todo = store.loadSaved().filter((i) => !recipeThemes(i.recipe).length).slice(0, 40);
+  if (!todo.length) return toast("Toutes les recettes sont déjà classées.");
+  const buttons = document.querySelectorAll(".auto-classify");
+  buttons.forEach((b) => (b.disabled = true));
+  toast("Classement en cours…");
+  try {
+    const code = store.getAccessCode();
+    const res = await fetch("/api/classify", {
+      method: "POST",
+      headers: { "content-type": "application/json", ...(code ? { "x-access-code": code } : {}) },
+      body: JSON.stringify({
+        recipes: todo.map((i) => ({
+          id: i.id,
+          title: i.recipe.title,
+          category: i.recipe.category,
+          tags: i.recipe.tags || [],
+          ingredients: i.recipe.ingredients.map((g) => g.name),
+          totalMin: (i.recipe.prepTimeMin || 0) + (i.recipe.cookTimeMin || 0) || null,
+        })),
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 401 || data.code === "AUTH_REQUIRED") {
+      pending = { classify: true };
+      if (code) store.setAccessCode("");
+      goto("home");
+      $("access-form").hidden = false;
+      $("access-code").value = "";
+      $("access-code").focus();
+      return setStatus(code ? "Code incorrect. Réessaie." : "Code d'accès requis.", true);
+    }
+    if (!res.ok) throw new Error(data.error || "Erreur " + res.status);
+
+    const list = store.loadSaved();
+    let done = 0;
+    for (const item of list) {
+      const themes = data.themes && data.themes[item.id];
+      if (!Array.isArray(themes) || recipeThemes(item.recipe).length) continue;
+      const clean = sanitizeRecipe({ ...item.recipe, themes });
+      if (clean && clean.themes.length) {
+        item.recipe = { ...item.recipe, themes: clean.themes };
+        done++;
+      }
+    }
+    if (done) persist(list, `${done} recette${done > 1 ? "s" : ""} classée${done > 1 ? "s" : ""}`);
+    else toast("Gemini n'a pas su classer ces recettes : choisis les thèmes sur chaque fiche.");
+    const left = list.filter((i) => !recipeThemes(i.recipe).length).length;
+    if (done && left) toast(`${done} classée${done > 1 ? "s" : ""}, ${left} restante${left > 1 ? "s" : ""}`);
+    goto(openedTheme === NO_THEME && !left && visibleScreen() === "theme" ? "themes" : visibleScreen());
+  } catch (err) {
+    toast(err.message || "Classement impossible.");
+  } finally {
+    buttons.forEach((b) => (b.disabled = false));
+  }
+}
+document.querySelectorAll(".auto-classify").forEach((b) => b.addEventListener("click", autoClassify));
 
 /* ---------- Courses : choix des recettes, puis liste groupée ---------- */
 function updateMakeList() {

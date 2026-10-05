@@ -11,7 +11,7 @@ PWA installable sur Android + une route serverless (`/api/recipe`) qui confie la
 - **Portions** ajustables, ingrédients à cocher, liste de courses copiable.
 - **Modifier** : corrige titre, catégorie, portions, ingrédients et étapes à la main (ajout, suppression, fractions `1/2` acceptées). Une fiche déjà enregistrée est mise à jour automatiquement.
 - **Mode cuisine** : une étape à la fois en grand, glisser pour changer d'étape, **minuteurs** pour les étapes qui ont une durée (son + vibration à la fin, plusieurs minuteurs possibles), écran maintenu allumé.
-- **Thématiques** : Gemini range chaque recette dans 1 ou 2 thématiques d'une liste fixe (cuisine française, italienne, réunionnaise, Asie, Orient et Maghreb, Amériques, plat rapide, léger, végétarien, fêtes et apéro, douceurs, plats mijotés, incontournables du monde). Onglet **Thèmes** (tuiles + liste), filtre par thématique sur l'accueil, recettes sans thématique dans « Non classées ». Dans **Modifier**, on change les thématiques (3 au plus) et on crée les siennes (« Repas de Noël »).
+- **Thématiques** : Gemini range chaque recette dans 1 ou 2 thématiques d'une liste fixe (cuisine française, italienne, réunionnaise, Asie, Orient et Maghreb, Amériques, plat rapide, léger, végétarien, fêtes et apéro, douceurs, plats mijotés, incontournables du monde). Onglet **Thèmes** (tuiles + liste), filtre par thématique sur l'accueil, recettes sans thématique dans « Non classées ». Pour classer : bouton **Classer cette recette** sur chaque fiche (enregistré tout de suite) et bouton **Classer automatiquement** dans l'onglet Thèmes (un seul appel Gemini, texte seul, pour toutes les recettes sans thématique, 40 au plus par appel). Dans **Modifier**, on change les thématiques (3 au plus) et on crée les siennes (« Repas de Noël »).
 - **Rangement** : catégorie et mots-clés proposés par Gemini, recherche (titre, ingrédient, mot-clé, thématique — sans tenir compte des accents).
 - **Visuel** : inspiré du projet « Saveurs » (cartes arrondies, titres en Fraunces, texte en Plus Jakarta Sans, navigation en bas, mode sombre). Pas de photos : chaque carte a la couleur de sa thématique et l'emoji du plat.
 - **Liste de courses groupée** : coche plusieurs recettes enregistrées ; les ingrédients identiques sont additionnés selon les portions (`500 g` + `25 cl`… `œufs` / `oeuf`, `g` / `kg`, `ml` / `cl` / `l`).
@@ -90,6 +90,8 @@ npx vercel dev               # lance le site et l'API en local
 
 ```
 api/recipe.ts      route serverless (code d'accès, vidéo ou transcription)
+api/classify.ts    classement par thématiques de recettes déjà enregistrées (un appel)
+lib/classify.ts    prompt et validation du classement
 lib/access.ts      vérification du code d'accès
 lib/youtube.ts     lien → identifiant de vidéo
 lib/extract.ts     prompt + appels à Gemini (vidéo, ou texte en secours)
