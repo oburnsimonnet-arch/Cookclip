@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { isAuthorized } from "../lib/access.js";
+import { quotaDetail } from "../lib/quota.js";
 import { MAX_CLASSIFY, classifyRecipes, type ClassifyInput } from "../lib/classify.js";
 
 export const config = { maxDuration: 60 };
@@ -46,7 +47,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   } catch (err) {
     const status = (err as { status?: number } | null)?.status;
     if (status === 429) {
-      return res.status(429).json({ error: "Limite d'utilisation de Gemini atteinte. Réessaie dans quelques minutes." });
+      return res.status(429).json({
+        error: "Limite d'utilisation de Gemini atteinte. Réessaie dans quelques minutes.",
+        detail: quotaDetail(err instanceof Error ? err.message : ""),
+      });
     }
     console.error("Échec du classement :", status ?? "", err instanceof Error ? err.message : err);
     return res.status(500).json({ error: "Le classement a échoué. Réessaie dans un instant." });

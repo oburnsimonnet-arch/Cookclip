@@ -67,3 +67,13 @@ test("source : seuls les liens http(s) sont gardés", () => {
   assert.equal(pickSource("", "", []), null);
   assert.ok(SEARCH_PROMPT.includes('"results"'));
 });
+
+import { quotaDetail } from "../lib/quota.js";
+test("quota : le détail de l'erreur 429 est lisible et borné", () => {
+  const msg = 'Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 0. Please retry in 31.2s';
+  const d = quotaDetail(msg)!;
+  assert.match(d, /limite : 0/);
+  assert.match(d, /réessayer dans 32 s/);
+  assert.equal(quotaDetail(""), null);
+  assert.ok(quotaDetail("x".repeat(1000))!.length <= 300);
+});

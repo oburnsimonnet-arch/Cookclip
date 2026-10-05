@@ -55,6 +55,12 @@ function toast(msg) {
   toast.timer = setTimeout(() => (t.hidden = true), 2800);
 }
 
+/** Message d'erreur du serveur, avec le détail du quota Gemini quand il y en a un. */
+function errorText(data, res) {
+  const base = (data && data.error) || "Erreur " + res.status;
+  return data && data.detail ? `${base} (${data.detail})` : base;
+}
+
 function setStatus(msg, isError = false) {
   const s = $("status");
   s.hidden = !msg;
@@ -303,7 +309,7 @@ async function extract(payload, { force = false } = {}) {
     }
     if (!res.ok) {
       if (data.code === "VIDEO_UNREADABLE") $("manual").open = true;
-      throw new Error(data.error || "Erreur " + res.status);
+      throw new Error(errorText(data, res));
     }
 
     $("access-form").hidden = true;
@@ -604,7 +610,7 @@ async function searchWeb(query) {
       setStatus(code ? "Code incorrect. Réessaie." : "Code d'accès requis.", true);
       return setWebStatus("");
     }
-    if (!res.ok) throw new Error(data.error || "Erreur " + res.status);
+    if (!res.ok) throw new Error(errorText(data, res));
     const results = (Array.isArray(data.results) ? data.results : [])
       .map((r) => {
         const recipe = sanitizeRecipe(r && r.recipe);
@@ -689,7 +695,7 @@ async function autoClassify() {
       $("access-code").focus();
       return setStatus(code ? "Code incorrect. Réessaie." : "Code d'accès requis.", true);
     }
-    if (!res.ok) throw new Error(data.error || "Erreur " + res.status);
+    if (!res.ok) throw new Error(errorText(data, res));
 
     const list = store.loadSaved();
     let done = 0;

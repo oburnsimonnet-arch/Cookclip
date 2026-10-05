@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { isAuthorized } from "../lib/access.js";
+import { quotaDetail } from "../lib/quota.js";
 import { extractRecipeFromText, extractRecipeFromVideo } from "../lib/extract.js";
 import { extractVideoId } from "../lib/youtube.js";
 
@@ -79,6 +80,7 @@ function sendError(res: VercelResponse, err: unknown) {
     console.error("Quota Gemini atteint :", message);
     return res.status(429).json({
       error: "Limite d'utilisation de Gemini atteinte. Réessaie dans quelques minutes.",
+      detail: quotaDetail(message),
     });
   }
   if (status === 400 || status === 403 || status === 404) {
