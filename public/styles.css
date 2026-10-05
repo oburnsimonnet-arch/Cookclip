@@ -32,32 +32,6 @@
   --font-body: "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   color-scheme: light;
 }
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: oklch(0.19 0.015 50);
-    --fg: oklch(0.95 0.01 70);
-    --card: oklch(0.24 0.016 50);
-    --secondary: oklch(0.29 0.018 50);
-    --muted-fg: oklch(0.76 0.02 60);
-    --border: oklch(0.34 0.02 50);
-    --primary: oklch(0.72 0.17 48);
-    --primary-strong: oklch(0.75 0.16 50);
-    --on-primary: oklch(0.2 0.02 40);
-    --btn: oklch(0.75 0.16 50);
-    --danger: oklch(0.75 0.15 25);
-    --tip-bg: oklch(0.28 0.04 80);
-    --tip-border: oklch(0.4 0.06 80);
-    --tip-fg: oklch(0.92 0.06 85);
-    --warn-bg: oklch(0.28 0.04 50);
-    --warn-border: oklch(0.4 0.06 50);
-    --warn-fg: oklch(0.9 0.05 60);
-    --glow-a: oklch(0.27 0.04 55);
-    --glow-b: oklch(0.24 0.03 35);
-    --shadow: 0 1px 2px #0006, 0 8px 24px -12px #0008;
-    color-scheme: dark;
-  }
-}
-
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 html { -webkit-text-size-adjust: 100%; }
