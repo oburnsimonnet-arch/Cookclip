@@ -6,19 +6,19 @@
 
 /** colors : trois couleurs du dégradé de la carte (même principe que le projet de référence) */
 export const THEMES = [
-  { key: "france", label: "Cuisine française", short: "France", emoji: "🥖", aliases: ["francais", "francaise"], colors: ["#991b1b", "#be123c", "#b45309"] },
+  { key: "france", label: "Cuisine française", short: "France", emoji: "🥖", aliases: ["francais", "francaise"], colors: ["#f87171", "#e11d48", "#be123c"] },
   { key: "italie", label: "Cuisine italienne", short: "Italie", emoji: "🍝", aliases: ["italien", "italienne"], colors: ["#ef4444", "#fb923c", "#facc15"] },
   { key: "reunion", label: "Cuisine réunionnaise", short: "Réunion", emoji: "🌺", aliases: ["reunionnaise", "creole", "ile de la reunion"], colors: ["#fb923c", "#ef4444", "#e11d48"] },
   { key: "asie", label: "Saveurs d'Asie", short: "Asie", emoji: "🍜", aliases: ["asiatique", "asie"], colors: ["#fb7185", "#ec4899", "#c026d3"] },
-  { key: "orient", label: "Orient et Maghreb", short: "Orient", emoji: "🥙", aliases: ["maghreb", "moyen orient", "orient et maghreb"], colors: ["#f59e0b", "#ea580c", "#b91c1c"] },
-  { key: "ameriques", label: "Amériques", short: "Amériques", emoji: "🌮", aliases: ["amerique", "mexicain", "tex mex", "americain"], colors: ["#84cc16", "#eab308", "#f97316"] },
+  { key: "orient", label: "Orient et Maghreb", short: "Orient", emoji: "🥙", aliases: ["maghreb", "moyen orient", "orient et maghreb"], colors: ["#fbbf24", "#f97316", "#dc2626"] },
+  { key: "ameriques", label: "Amériques", short: "Amériques", emoji: "🌮", aliases: ["amerique", "mexicain", "tex mex", "americain"], colors: ["#a3e635", "#facc15", "#f97316"] },
   { key: "rapide", label: "Plat rapide du soir", short: "Rapide", emoji: "⏱️", aliases: ["plat rapide", "express"], colors: ["#facc15", "#f59e0b", "#f97316"] },
-  { key: "leger", label: "Léger et healthy", short: "Léger", emoji: "🥗", aliases: ["healthy", "light", "leger et healthy"], colors: ["#a3e635", "#22c55e", "#059669"] },
-  { key: "vegetarien", label: "Végétarien", short: "Végé", emoji: "🥦", aliases: ["vegetarienne", "vegetal", "vegan", "vege"], colors: ["#22c55e", "#10b981", "#0d9488"] },
-  { key: "fetes", label: "Fêtes et apéro", short: "Fêtes", emoji: "🎉", aliases: ["fete", "apero", "aperitif", "fetes et apero"], colors: ["#d946ef", "#a855f7", "#4f46e5"] },
+  { key: "leger", label: "Léger et healthy", short: "Léger", emoji: "🥗", aliases: ["healthy", "light", "leger et healthy"], colors: ["#a3e635", "#22c55e", "#10b981"] },
+  { key: "vegetarien", label: "Végétarien", short: "Végé", emoji: "🥦", aliases: ["vegetarienne", "vegetal", "vegan", "vege"], colors: ["#22c55e", "#10b981", "#14b8a6"] },
+  { key: "fetes", label: "Fêtes et apéro", short: "Fêtes", emoji: "🎉", aliases: ["fete", "apero", "aperitif", "fetes et apero"], colors: ["#d946ef", "#a855f7", "#6366f1"] },
   { key: "gourmandises", label: "Douceurs et pâtisserie", short: "Douceurs", emoji: "🍰", aliases: ["dessert", "desserts", "patisserie", "douceurs", "douceurs et patisserie"], colors: ["#f472b6", "#fb7185", "#fbbf24"] },
-  { key: "reconfort", label: "Plats mijotés", short: "Mijotés", emoji: "🍲", aliases: ["mijote", "mijotes", "reconfort", "plats mijotes", "soupe"], colors: ["#b45309", "#c2410c", "#991b1b"] },
-  { key: "monde", label: "Les incontournables du monde", short: "Monde", emoji: "🌍", aliases: ["incontournables", "international"], colors: ["#eab308", "#f97316", "#ef4444"] },
+  { key: "reconfort", label: "Plats mijotés", short: "Mijotés", emoji: "🍲", aliases: ["mijote", "mijotes", "reconfort", "plats mijotes", "soupe"], colors: ["#f97316", "#dc2626", "#9f1239"] },
+  { key: "monde", label: "Les incontournables du monde", short: "Monde", emoji: "🌍", aliases: ["incontournables", "international"], colors: ["#facc15", "#f97316", "#ef4444"] },
 ];
 
 /** Une recette peut avoir jusqu'à 3 thématiques (le serveur en propose 2 au plus). */
@@ -93,7 +93,7 @@ function customColors(name) {
   let hash = 0;
   for (const ch of normText(name)) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
   const hue = hash % 360;
-  return [`hsl(${hue} 80% 62%)`, `hsl(${(hue + 28) % 360} 72% 52%)`, `hsl(${(hue + 55) % 360} 62% 40%)`];
+  return [`hsl(${hue} 90% 60%)`, `hsl(${(hue + 28) % 360} 85% 54%)`, `hsl(${(hue + 55) % 360} 80% 48%)`];
 }
 
 /** Tout ce qu'il faut pour afficher une thématique (connue, personnalisée ou « non classées »). */
@@ -104,8 +104,8 @@ export function themeInfo(key) {
       label: "Non classées",
       short: "Non classées",
       emoji: "🍴",
-      colors: ["#a8a29e", "#78716c", "#57534e"],
-      gradient: gradientCss(["#a8a29e", "#78716c", "#57534e"]),
+      colors: ["#d6d3d1", "#a8a29e", "#78716c"],
+      gradient: gradientCss(["#d6d3d1", "#a8a29e", "#78716c"]),
       custom: false,
       none: true,
     };
