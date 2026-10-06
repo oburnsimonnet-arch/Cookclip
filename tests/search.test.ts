@@ -77,3 +77,8 @@ test("quota : le détail de l'erreur 429 est lisible et borné", () => {
   assert.equal(quotaDetail(""), null);
   assert.ok(quotaDetail("x".repeat(1000))!.length <= 300);
 });
+
+test("quota : message générique de Gemini (JSON brut) -> phrase claire", () => {
+  const raw = '{"error":{"code":429,"message":"You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits.","status":"RESOURCE_EXHAUSTED"}}';
+  assert.match(quotaDetail(raw)!, /offre gratuite/);
+});
